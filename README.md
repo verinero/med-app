@@ -54,3 +54,7 @@ Each call can be tagged with one of three statuses from the new call header:
 - **Refusal** — patient refused care/transport
 
 Status tags appear on call cards in the home dashboard and are included in CSV/PDF exports.
+
+## Notes
+
+Fix bug on stale entries attributed to a shift.
