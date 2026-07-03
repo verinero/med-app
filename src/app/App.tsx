@@ -3,7 +3,7 @@ import { db, callsToCSV, downloadCSV, type CallRecord, type Shift } from "../db"
 import { HOME_COLOR, TH, T_CHIPS, M_CHIPS, type Screen } from "./constants";
 import { blankForm, callToForm, dateStr, dateStrFor, sevenDaysAgo, type CallForm } from "./callForm";
 import { blankShiftDraft, toDatetimeLocalValue, fromDatetimeLocalValue, type ShiftDraft } from "./shiftForm";
-import { callOutcomeSegments, hospitalCounts } from "./callStats";
+import { callOutcomeSegments, hospitalCounts, ivSuccessStats, techedByUnitType as computeTechedByUnitType } from "./callStats";
 import { shiftSummaries, shiftsByUnitType as computeShiftsByUnitType, hoursByUnitType as computeHoursByUnitType } from "./shiftStats";
 import { formatDuration } from "./shiftStats";
 import { ExportScreen } from "./screens/ExportScreen";
@@ -80,9 +80,11 @@ export default function App() {
 
   const outcomeSegments  = useMemo(() => callOutcomeSegments(allCalls), [allCalls]);
   const hospitalData     = useMemo(() => hospitalCounts(allCalls), [allCalls]);
+  const ivStats          = useMemo(() => ivSuccessStats(allCalls), [allCalls]);
   const shiftHistory     = useMemo(() => shiftSummaries(shifts, allCalls), [shifts, allCalls]);
   const shiftsByUnitType = useMemo(() => computeShiftsByUnitType(shifts), [shifts]);
   const hoursByUnitType  = useMemo(() => computeHoursByUnitType(shifts), [shifts]);
+  const techedByUnitType = useMemo(() => computeTechedByUnitType(allCalls), [allCalls]);
 
   // Most recently started shift (by startTime) — used to prefill new shifts/calls.
   const mostRecentShift = useMemo(() =>
@@ -92,7 +94,7 @@ export default function App() {
   // A shift with no endTime is treated as currently open, for the header pill.
   const openShift = useMemo(() => shifts.find(s => s.endTime == null) ?? null, [shifts]);
 
-  const pillUnitLabel = mostRecentShift ? `${mostRecentShift.unitType}-${mostRecentShift.unitNum}` : null;
+  const pillUnitLabel = mostRecentShift ? `${mostRecentShift.unitType}${mostRecentShift.unitNum}` : null;
   const pillElapsedLabel = openShift ? formatDuration(now - openShift.startTime) : undefined;
 
   const chips = f.mode === "trauma" ? T_CHIPS : M_CHIPS;
@@ -173,8 +175,11 @@ export default function App() {
       medOn: f.medOn, salineAmt: f.salineAmt, lrAmt: f.lrAmt, zofran: f.zofran, toradol: f.toradol,
       leadOn: f.leadOn, leadInterp: f.leadInterp,
       ivOn: f.ivOn, gauge: f.gauge, ivLR: f.ivLR, ivSite: f.ivSite,
+      ivEstablished: f.ivEstablished, ivAttempts: f.ivAttempts,
       allergies: f.allergies, medHistory: f.medHistory, notes: f.notes,
       callStatus: f.callStatus,
+      techedCall: f.techedCall,
+      acuity: f.acuity,
       hospital: f.transportMode === "refusal" ? "" : f.hospital,
       transportMode: f.transportMode,
       locked,
@@ -404,9 +409,11 @@ export default function App() {
         totalCalls={allCalls.length}
         outcomeSegments={outcomeSegments}
         hospitalData={hospitalData}
+        ivStats={ivStats}
         shiftHistory={shiftHistory}
         shiftsByUnitType={shiftsByUnitType}
         hoursByUnitType={hoursByUnitType}
+        techedByUnitType={techedByUnitType}
         navTab={navTab}
         setNavTab={setNavTab}
         onHome={() => setScreen("home")}

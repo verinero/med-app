@@ -46,11 +46,15 @@ export interface CallRecord {
   gauge: string;
   ivLR: string;
   ivSite: string;
+  ivEstablished?: boolean;
+  ivAttempts?: string;
   // extras
   allergies: string;
   medHistory: string;
   notes: string;
   callStatus?: string;
+  techedCall?: boolean;
+  acuity?: string;
   hospital?: string;
   transportMode?: string;
   locked?: boolean;
@@ -88,21 +92,6 @@ class EMSDatabase extends Dexie {
 
 export const db = new EMSDatabase();
 
-// ── Settings helpers ──────────────────────────────────────────
-export async function getSetting(key: string, fallback = ""): Promise<string> {
-  const row = await db.settings.where("key").equals(key).first();
-  return row?.value ?? fallback;
-}
-
-export async function setSetting(key: string, value: string): Promise<void> {
-  const existing = await db.settings.where("key").equals(key).first();
-  if (existing?.id != null) {
-    await db.settings.update(existing.id, { value });
-  } else {
-    await db.settings.add({ key, value });
-  }
-}
-
 // ── Export helpers ────────────────────────────────────────────
 export function callsToCSV(calls: CallRecord[]): string {
   const headers = [
@@ -112,7 +101,7 @@ export function callsToCSV(calls: CallRecord[]): string {
     "Oxygen", "O2 Type", "O2 Liters",
     "Medication", "Saline(mL)", "LR(mL)", "Zofran", "Toradol",
     "12-Lead", "ECG Interp",
-    "IV", "Gauge", "IV Side", "IV Site",
+    "IV", "Gauge", "IV Side", "IV Site", "IV Established", "IV Attempts",
     "Allergies", "Med History", "Notes", "Call Status", "Hospital",
   ];
   const rows = calls.map(c => [
@@ -122,7 +111,7 @@ export function callsToCSV(calls: CallRecord[]): string {
     c.oxyOn ? "Y" : "N", c.oxyType, c.oxyLiters,
     c.medOn ? "Y" : "N", c.salineAmt, c.lrAmt, c.zofran ? "Y" : "N", c.toradol ? "Y" : "N",
     c.leadOn ? "Y" : "N", `"${c.leadInterp}"`,
-    c.ivOn ? "Y" : "N", c.gauge, c.ivLR, c.ivSite,
+    c.ivOn ? "Y" : "N", c.gauge, c.ivLR, c.ivSite, c.ivOn ? (c.ivEstablished ? "Y" : "N") : "", c.ivAttempts || "",
     `"${c.allergies}"`, `"${c.medHistory}"`, `"${c.notes}"`, c.callStatus || "", c.hospital || "",
   ]);
   return [headers, ...rows].map(r => r.join(",")).join("\n");

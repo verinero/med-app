@@ -43,6 +43,34 @@ export function IvAccessCard({ f, setFld, c }: { f: CallForm; setFld: SetFld; c:
               ))}
             </div>
           </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <span style={{ ...microLabel, display: "block", marginBottom: 7 }}>ESTABLISHED?</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                {[["Yes", true], ["No", false]].map(([label, val]) => (
+                  <button key={label as string} onClick={() => f.ivOn && setFld("ivEstablished", val as boolean)} style={{
+                    flex: 1, padding: "7px 0", borderRadius: 9, cursor: f.ivOn ? "pointer" : "default",
+                    border: `1.5px solid ${f.ivEstablished === val && f.ivOn ? c.p : "#E2E5EC"}`,
+                    background: f.ivEstablished === val && f.ivOn ? c.l : "#F8F9FC",
+                    color: f.ivEstablished === val && f.ivOn ? c.p : "#9ca3af",
+                    fontSize: 13, fontWeight: 800, opacity: f.ivOn ? 1 : 0.4, transition: "all 0.15s",
+                  }}>{label as string}</button>
+                ))}
+              </div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <span style={{ ...microLabel, display: "block", marginBottom: 7 }}>ATTEMPTS</span>
+              <input type="number" min={1} inputMode="numeric" placeholder="1" value={f.ivAttempts}
+                disabled={!f.ivOn}
+                onChange={e => setFld("ivAttempts", e.target.value)}
+                style={{
+                  width: "100%", boxSizing: "border-box", background: f.ivOn ? "#F8F9FC" : "#F2F3F7",
+                  border: "1.5px solid #E2E5EC", borderRadius: 10, padding: "7px 11px",
+                  fontSize: 13, fontWeight: 700, color: "#0d1117", outline: "none",
+                  opacity: f.ivOn ? 1 : 0.45, fontFamily: "'JetBrains Mono', monospace", textAlign: "center",
+                }} />
+            </div>
+          </div>
           <div>
             <span style={{ ...microLabel, display: "block", marginBottom: 7 }}>LOCATION</span>
             <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>

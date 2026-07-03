@@ -6,6 +6,10 @@ function formatDate(ts: number) {
   return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function formatTime(ts: number) {
+  return new Date(ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
 export function ShiftHistoryList({ shifts, onSelect, onDelete }: {
   shifts: ShiftSummary[]; onSelect?: (id: number) => void; onDelete?: (id: number) => void;
 }) {
@@ -35,7 +39,7 @@ export function ShiftHistoryList({ shifts, onSelect, onDelete }: {
           >
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#0d1117" }}>
-                {formatDate(s.startTime)} · {s.unitType}-{s.unitNum}{s.crew ? ` · ${s.crew}` : ""}
+                {formatDate(s.startTime)} · {s.unitType}{s.unitNum} · {formatTime(s.startTime)}{s.crew ? ` · ${s.crew}` : ""}
               </div>
               <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
                 {s.endTime ? formatDuration(s.endTime - s.startTime) : "In progress"} · {s.callCount} call{s.callCount === 1 ? "" : "s"}

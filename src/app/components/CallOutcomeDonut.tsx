@@ -39,6 +39,13 @@ export function CallOutcomeDonut({ total, segments }: { total: number; segments:
         <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
           {total === 0 ? (
             <circle cx={CENTER} cy={CENTER} r={RADIUS} fill="none" stroke="#E2E5EC" strokeWidth={STROKE} />
+          ) : active.length === 1 ? (
+            // A single 100% segment is a full 360° sweep — an SVG arc can't draw
+            // that (start/end points coincide, so browsers render nothing), so
+            // fall back to a plain circle in that one-segment case.
+            <circle cx={CENTER} cy={CENTER} r={RADIUS} fill="none" stroke={active[0].color} strokeWidth={STROKE}>
+              <title>{active[0].label}: {active[0].value} (100%)</title>
+            </circle>
           ) : (
             arcs.map(({ seg, start, end }) => (
               <path key={seg.key} d={describeArc(start, end)} fill="none" stroke={seg.color} strokeWidth={STROKE} strokeLinecap="butt">

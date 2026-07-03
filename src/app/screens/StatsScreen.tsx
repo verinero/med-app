@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { HOME_COLOR } from "../constants";
-import type { CallOutcomeSegment, HospitalCount } from "../callStats";
+import type { CallOutcomeSegment, HospitalCount, IvSuccessStats, TechedByUnitTypeSegment } from "../callStats";
 import type { ShiftSummary, UnitTypeSegment } from "../shiftStats";
 import type { ShiftDraft, SetShiftFld } from "../shiftForm";
 import { PhoneShell } from "../components/PhoneShell";
@@ -13,21 +13,22 @@ import { BottomNav } from "../components/BottomNav";
 import { CallOutcomeDonut } from "../components/CallOutcomeDonut";
 import { HospitalBarChart } from "../components/HospitalBarChart";
 import { UnitTypeStackedBar } from "../components/UnitTypeStackedBar";
+import { TechedByUnitTypeBar } from "../components/TechedByUnitTypeBar";
 import { ShiftPill } from "../components/ShiftPill";
 import { ShiftManagerModal } from "../components/ShiftManagerModal";
 import { ShiftHistoryList } from "../components/ShiftHistoryList";
 import { eyebrow } from "../styles";
 
 export function StatsScreen({
-  totalCalls, outcomeSegments, hospitalData, shiftHistory, shiftsByUnitType, hoursByUnitType,
+  totalCalls, outcomeSegments, hospitalData, ivStats, shiftHistory, shiftsByUnitType, hoursByUnitType, techedByUnitType,
   navTab, setNavTab, onHome, onExport, onNewCall, onSettings,
   pillUnitLabel, pillElapsedLabel,
   showShiftManager, shiftManagerTab, setShiftManagerTab, shiftDraft, setShiftFld, editingShiftId,
   onOpenShiftManager, onCloseShiftManager, onSaveShift, onNewShiftInManager, onSelectHistoryShift,
   deleteShiftTarget, onRequestDeleteShift, onCancelDeleteShift, onConfirmDeleteShift,
 }: {
-  totalCalls: number; outcomeSegments: CallOutcomeSegment[]; hospitalData: HospitalCount[]; shiftHistory: ShiftSummary[];
-  shiftsByUnitType: UnitTypeSegment[]; hoursByUnitType: UnitTypeSegment[];
+  totalCalls: number; outcomeSegments: CallOutcomeSegment[]; hospitalData: HospitalCount[]; ivStats: IvSuccessStats; shiftHistory: ShiftSummary[];
+  shiftsByUnitType: UnitTypeSegment[]; hoursByUnitType: UnitTypeSegment[]; techedByUnitType: TechedByUnitTypeSegment[];
   navTab: string; setNavTab: (t: string) => void;
   onHome: () => void; onExport: () => void; onNewCall: () => void; onSettings: () => void;
   pillUnitLabel: string | null; pillElapsedLabel?: string;
@@ -73,6 +74,23 @@ export function StatsScreen({
           <HospitalBarChart data={hospitalData} />
         </FormCard>
 
+        {ivStats.attempted > 0 && (
+          <>
+            <SLabel>IV Access</SLabel>
+            <FormCard accent={HOME_COLOR.p}>
+              <CardHead color={HOME_COLOR.p} label="Success Rate" />
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                <span style={{ fontSize: 36, fontWeight: 800, color: "#16A34A", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "-0.03em" }}>
+                  {ivStats.rate}%
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#9ca3af" }}>
+                  {ivStats.established} of {ivStats.attempted} established
+                </span>
+              </div>
+            </FormCard>
+          </>
+        )}
+
         <SLabel>Shifts</SLabel>
         <FormCard accent={HOME_COLOR.p}>
           <button onClick={() => setHistoryOpen(o => !o)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", padding: 0, cursor: "pointer", width: "100%" }}>
@@ -90,6 +108,10 @@ export function StatsScreen({
         <FormCard accent={HOME_COLOR.p}>
           <CardHead color={HOME_COLOR.p} label="Hours by Unit Type" />
           <UnitTypeStackedBar segments={hoursByUnitType} formatValue={v => `${v}h`} />
+        </FormCard>
+        <FormCard accent={HOME_COLOR.p}>
+          <CardHead color={HOME_COLOR.p} label="Teched by Unit Type" />
+          <TechedByUnitTypeBar segments={techedByUnitType} />
         </FormCard>
       </div>
 

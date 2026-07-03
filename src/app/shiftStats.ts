@@ -41,13 +41,13 @@ export interface UnitTypeSegment {
   color: string;
 }
 
-const UNIT_TYPE_ORDER = ["B", "IM", "AM"] as const;
-const UNIT_TYPE_LABELS: Record<string, string> = {
+export const UNIT_TYPE_ORDER = ["B", "IM", "AM"] as const;
+export const UNIT_TYPE_LABELS: Record<string, string> = {
   B: "Basic (B)",
   IM: "Intermediate (IM)",
   AM: "Advanced (AM)",
 };
-const UNIT_TYPE_COLORS: Record<string, string> = {
+export const UNIT_TYPE_COLORS: Record<string, string> = {
   B: "#7B1FA2",
   IM: "#0D9488",
   AM: "#4338CA",

@@ -12,7 +12,7 @@ function formatShiftDate(ts: number) {
 
 function shiftOptionLabel(s: ShiftSummary) {
   const dur = s.endTime ? formatDuration(s.endTime - s.startTime) : "in progress";
-  return `${formatShiftDate(s.startTime)} · ${s.unitType}-${s.unitNum}${s.crew ? ` · ${s.crew}` : ""} (${dur})`;
+  return `${formatShiftDate(s.startTime)} · ${s.unitType}${s.unitNum}${s.crew ? ` · ${s.crew}` : ""} (${dur})`;
 }
 
 export function ShiftTagCard({ f, setFld, c, shifts }: {
@@ -45,7 +45,7 @@ export function ShiftTagCard({ f, setFld, c, shifts }: {
         </select>
         <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 8 }}>
           {tagged
-            ? `Date and unit for this call come from this shift: ${formatShiftDate(tagged.startTime)} · ${tagged.unitType}-${tagged.unitNum}`
+            ? `Date and unit for this call come from this shift: ${formatShiftDate(tagged.startTime)} · ${tagged.unitType}${tagged.unitNum}`
             : "Date and unit will be blank until this call is tagged to a shift."}
         </div>
       </div>

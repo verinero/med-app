@@ -9,18 +9,18 @@ export function TransportCard({ f, setFld, c }: { f: CallForm; setFld: SetFld; c
       <CardHead color={c.p} label="Transport" />
       {/* Tab toggle */}
       <div style={{ background: "#F2F3F7", borderRadius: 11, padding: 3, display: "flex" }}>
-        {(["hospital", "refusal"] as const).map(tab => {
+        {(["hospital", "refusal", "nurse_navigation"] as const).map(tab => {
           const active = f.transportMode === tab;
           return (
-            <button key={tab} onClick={() => { setFld("transportMode", tab); if (tab === "refusal") setFld("hospital", ""); }}
+            <button key={tab} onClick={() => { setFld("transportMode", tab); if (tab !== "hospital") setFld("hospital", ""); }}
               style={{
                 flex: 1, padding: "8px 0", borderRadius: 8, border: "none", cursor: "pointer",
                 fontSize: 13, fontWeight: 700, transition: "all 0.2s",
                 background: active ? "#fff" : "transparent",
-                color: active ? (tab === "refusal" ? "#BE123C" : c.p) : "#9ca3af",
+                color: active ? (tab === "refusal" ? "#BE123C" : tab === "nurse_navigation" ? "#0D9488" : c.p) : "#9ca3af",
                 boxShadow: active ? "0 1px 6px rgba(0,0,0,0.1)" : "none",
               }}
-            >{tab === "hospital" ? "Hospital" : "Refusal"}</button>
+            >{tab === "hospital" ? "Hospital" : tab === "refusal" ? "Refusal" : "Nurse Nav"}</button>
           );
         })}
       </div>
@@ -42,10 +42,15 @@ export function TransportCard({ f, setFld, c }: { f: CallForm; setFld: SetFld; c
           <option value="">Select hospital…</option>
           {HOSPITALS.map(h => <option key={h} value={h}>{h}</option>)}
         </select>
-      ) : (
+      ) : f.transportMode === "refusal" ? (
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "#FFE4E6", borderRadius: 12, border: "1.5px solid #FECDD3" }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#BE123C", flexShrink: 0 }} />
           <span style={{ fontSize: 13, fontWeight: 700, color: "#BE123C" }}>Patient refused transport</span>
+        </div>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "#CCFBF1", borderRadius: 12, border: "1.5px solid #99F6E4" }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#0D9488", flexShrink: 0 }} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#0D9488" }}>Patient referred to nurse navigation</span>
         </div>
       )}
     </FormCard>

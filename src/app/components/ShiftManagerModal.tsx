@@ -1,9 +1,12 @@
+import { useEffect, useRef, useState } from "react";
 import { HOME_COLOR, type UType } from "../constants";
 import type { ShiftDraft, SetShiftFld } from "../shiftForm";
 import type { ShiftSummary } from "../shiftStats";
 import { ShiftHistoryList } from "./ShiftHistoryList";
 import { DeleteModal } from "./DeleteModal";
 import { overlayStyle, sheetStyle, dragHandle, uLabelStyle, textInputStyle, primaryBtn } from "../styles";
+
+const DISMISS_THRESHOLD = 100;
 
 export function ShiftManagerModal({
   show, tab, onSetTab,
@@ -16,12 +19,45 @@ export function ShiftManagerModal({
   history: ShiftSummary[]; onSelectHistoryShift: (id: number) => void;
   deleteTargetId: number | null; onRequestDelete: (id: number) => void; onCancelDelete: () => void; onConfirmDelete: () => void;
 }) {
+  const [dragY, setDragY] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const startYRef = useRef(0);
+
+  useEffect(() => {
+    if (show) { setDragY(0); setDragging(false); }
+  }, [show]);
+
   if (!show) return null;
+
+  function handlePointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    setDragging(true);
+    startYRef.current = e.clientY;
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+  function handlePointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragging) return;
+    setDragY(Math.max(0, e.clientY - startYRef.current));
+  }
+  function handlePointerUp() {
+    setDragging(false);
+    if (dragY > DISMISS_THRESHOLD) onClose();
+    setDragY(0);
+  }
+
   return (
     <>
-      <div onClick={onClose} style={overlayStyle}>
-        <div onClick={e => e.stopPropagation()} style={{ ...sheetStyle, maxHeight: "88vh", display: "flex", flexDirection: "column" }}>
-          <div style={{ ...dragHandle, flexShrink: 0 }} />
+      <div onClick={onClose} style={{ ...overlayStyle, opacity: dragging ? Math.max(0.4, 1 - dragY / 400) : 1 }}>
+        <div onClick={e => e.stopPropagation()} style={{
+          ...sheetStyle, maxHeight: "88vh", display: "flex", flexDirection: "column",
+          transform: `translateY(${dragY}px)`, transition: dragging ? "none" : "transform 0.25s ease",
+        }}>
+          <div
+            style={{ ...dragHandle, flexShrink: 0, cursor: dragging ? "grabbing" : "grab", touchAction: "none" }}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+          />
 
           <div style={{ display: "flex", gap: 3, marginBottom: 20, background: "#F2F3F7", borderRadius: 11, padding: 3, flexShrink: 0 }}>
             {(["add", "history"] as const).map(t => (
@@ -42,8 +78,11 @@ export function ShiftManagerModal({
           )}
 
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-            {tab === "add" ? (
-              <>
+            <div style={{ display: "grid" }}>
+              <div style={{
+                gridArea: "1 / 1", visibility: tab === "add" ? "visible" : "hidden",
+                pointerEvents: tab === "add" ? "auto" : "none",
+              }}>
                 <div style={uLabelStyle}>Crew (optional)</div>
                 <input type="text" value={draft.crew} onChange={e => setDraftFld("crew", e.target.value)}
                   placeholder="e.g. Smith / Rodriguez" style={{ ...textInputStyle, marginBottom: 20 }} />
@@ -88,10 +127,15 @@ export function ShiftManagerModal({
                   <input type="datetime-local" value={draft.end} onChange={e => setDraftFld("end", e.target.value)}
                     style={{ ...textInputStyle, marginBottom: 8 }} />
                 )}
-              </>
-            ) : (
-              <ShiftHistoryList shifts={history} onSelect={onSelectHistoryShift} onDelete={onRequestDelete} />
-            )}
+              </div>
+
+              <div style={{
+                gridArea: "1 / 1", visibility: tab === "history" ? "visible" : "hidden",
+                pointerEvents: tab === "history" ? "auto" : "none",
+              }}>
+                <ShiftHistoryList shifts={history} onSelect={onSelectHistoryShift} onDelete={onRequestDelete} />
+              </div>
+            </div>
           </div>
 
           {tab === "add" && (

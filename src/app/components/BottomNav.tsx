@@ -22,10 +22,10 @@ export function BottomNav({ color, light, fabShadow, navTab, setNavTab, isSave, 
           </button>
         ) : (
           <div style={{ display: "flex", gap: 18 }}>
-            {[{ key: "activity", I: Activity, l: "Calls" }, { key: "export", I: Download, l: "Export" }].map(({ key, I, l }) => {
+            {[{ key: "activity", I: Activity, l: "Calls" }, { key: "stats", I: BarChart2, l: "Stats" }].map(({ key, I, l }) => {
               const active = navTab === key;
               return (
-                <button key={key} onClick={() => { setNavTab(key); if (key === "export") onExport(); if (key === "activity") onActivity?.(); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: 0, minWidth: 44 }}>
+                <button key={key} onClick={() => { setNavTab(key); if (key === "stats") onStats?.(); if (key === "activity") onActivity?.(); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: 0, minWidth: 44 }}>
                   <div style={{ width: 36, height: 36, borderRadius: 10, background: active ? light : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <I size={20} color={active ? color : "#9ca3af"} strokeWidth={active ? 2.5 : 2} />
                   </div>
@@ -53,10 +53,10 @@ export function BottomNav({ color, light, fabShadow, navTab, setNavTab, isSave, 
           </button>
         ) : (
           <div style={{ display: "flex", gap: 18 }}>
-            {[{ key: "stats", I: BarChart2, l: "Stats" }, { key: "settings", I: Settings, l: "Settings" }].map(({ key, I, l }) => {
+            {[{ key: "export", I: Download, l: "Export" }, { key: "settings", I: Settings, l: "Settings" }].map(({ key, I, l }) => {
               const active = navTab === key;
               return (
-                <button key={key} onClick={() => { setNavTab(key); if (key === "stats") onStats?.(); if (key === "settings") onSettings?.(); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: 0, minWidth: 44 }}>
+                <button key={key} onClick={() => { setNavTab(key); if (key === "export") onExport(); if (key === "settings") onSettings?.(); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: 0, minWidth: 44 }}>
                   <div style={{ width: 36, height: 36, borderRadius: 10, background: active ? light : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <I size={20} color={active ? color : "#9ca3af"} strokeWidth={active ? 2.5 : 2} />
                   </div>

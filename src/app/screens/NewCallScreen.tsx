@@ -17,6 +17,7 @@ import { InterventionsCard } from "./sections/InterventionsCard";
 import { IvAccessCard } from "./sections/IvAccessCard";
 import { PatientHistoryCard } from "./sections/PatientHistoryCard";
 import { NotesCard } from "./sections/NotesCard";
+import { AcuityCard } from "./sections/AcuityCard";
 import { TransportCard } from "./sections/TransportCard";
 import { eyebrow } from "../styles";
 
@@ -94,9 +95,22 @@ export function NewCallScreen({
         </div>
 
         <div style={{ paddingBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-          <span style={{ display: "inline-block", background: "rgba(255,255,255,0.14)", border: "1px solid rgba(255,255,255,0.22)", borderRadius: 100, padding: "4px 12px", fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.92)", alignSelf: "flex-start" }}>
-            {today}
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ display: "inline-block", background: "rgba(255,255,255,0.14)", border: "1px solid rgba(255,255,255,0.22)", borderRadius: 100, padding: "4px 12px", fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.92)" }}>
+              {today}
+            </span>
+            <button
+              onClick={() => setFld("techedCall", !f.techedCall)}
+              style={{
+                padding: "4px 11px", borderRadius: 100, cursor: "pointer",
+                border: `1.5px solid ${f.techedCall ? "#fff" : "rgba(255,255,255,0.35)"}`,
+                background: f.techedCall ? "#fff" : "rgba(255,255,255,0.12)",
+                color: f.techedCall ? "#0D9488" : "rgba(255,255,255,0.75)",
+                fontSize: 11, fontWeight: f.techedCall ? 800 : 600,
+                transition: "all 0.15s",
+              }}
+            >Teched Call</button>
+          </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {([
               { key: "cancelled_enroute",  label: "Cancelled: En Route", color: "#F59E0B" },
@@ -133,6 +147,7 @@ export function NewCallScreen({
           <IvAccessCard f={f} setFld={setFld} c={c} />
           <PatientHistoryCard f={f} setFld={setFld} c={c} />
           <NotesCard f={f} setFld={setFld} c={c} />
+          <AcuityCard f={f} setFld={setFld} c={c} />
           <TransportCard f={f} setFld={setFld} c={c} />
         </div>
       </div>
