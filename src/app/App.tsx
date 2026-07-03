@@ -220,7 +220,7 @@ export default function App() {
         totalCalls={savedCalls.length}
         ivsTotal={ivsTotal}
         medsTotal={medsTotal}
-        onBack={() => setScreen("home")}
+        onBack={() => { setNavTab("activity"); setScreen("home"); }}
         onExportCSV={exportCSV}
         onExportPDF={exportPDF}
       />
