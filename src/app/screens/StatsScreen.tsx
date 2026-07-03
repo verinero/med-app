@@ -1,5 +1,5 @@
 import { HOME_COLOR } from "../constants";
-import type { CallOutcomeSegment } from "../callStats";
+import type { CallOutcomeSegment, HospitalCount } from "../callStats";
 import { PhoneShell } from "../components/PhoneShell";
 import { CurvedShelf } from "../components/CurvedShelf";
 import { SLabel } from "../components/SLabel";
@@ -7,13 +7,14 @@ import { FormCard } from "../components/FormCard";
 import { CardHead } from "../components/CardHead";
 import { BottomNav } from "../components/BottomNav";
 import { CallOutcomeDonut } from "../components/CallOutcomeDonut";
+import { HospitalBarChart } from "../components/HospitalBarChart";
 import { eyebrow } from "../styles";
 
 export function StatsScreen({
-  totalCalls, outcomeSegments,
+  totalCalls, outcomeSegments, hospitalData,
   navTab, setNavTab, onHome, onExport, onNewCall,
 }: {
-  totalCalls: number; outcomeSegments: CallOutcomeSegment[];
+  totalCalls: number; outcomeSegments: CallOutcomeSegment[]; hospitalData: HospitalCount[];
   navTab: string; setNavTab: (t: string) => void;
   onHome: () => void; onExport: () => void; onNewCall: () => void;
 }) {
@@ -30,6 +31,12 @@ export function StatsScreen({
         <FormCard accent={HOME_COLOR.p}>
           <CardHead color={HOME_COLOR.p} label="All-Time Breakdown" />
           <CallOutcomeDonut total={totalCalls} segments={outcomeSegments} />
+        </FormCard>
+
+        <SLabel>Hospitals</SLabel>
+        <FormCard accent={HOME_COLOR.p}>
+          <CardHead color={HOME_COLOR.p} label="Most Transported To" />
+          <HospitalBarChart data={hospitalData} />
         </FormCard>
       </div>
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { db, getSetting, setSetting, callsToCSV, downloadCSV, type CallRecord } from "../db";
 import { HOME_COLOR, TH, T_CHIPS, M_CHIPS, type Screen, type UType } from "./constants";
 import { blankForm, callToForm, dateStr, sevenDaysAgo, type CallForm } from "./callForm";
-import { callOutcomeSegments } from "./callStats";
+import { callOutcomeSegments, hospitalCounts } from "./callStats";
 import { ExportScreen } from "./screens/ExportScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { NewCallScreen } from "./screens/NewCallScreen";
@@ -59,6 +59,7 @@ export default function App() {
   const medsTotal  = savedCalls.filter(c => c.medOn).length;
 
   const outcomeSegments = useMemo(() => callOutcomeSegments(allCalls), [allCalls]);
+  const hospitalData    = useMemo(() => hospitalCounts(allCalls), [allCalls]);
 
   const chips = f.mode === "trauma" ? T_CHIPS : M_CHIPS;
 
@@ -234,6 +235,7 @@ export default function App() {
       <StatsScreen
         totalCalls={allCalls.length}
         outcomeSegments={outcomeSegments}
+        hospitalData={hospitalData}
         navTab={navTab}
         setNavTab={setNavTab}
         onHome={() => setScreen("home")}

@@ -29,3 +29,20 @@ export function callOutcomeSegments(calls: CallRecord[]): CallOutcomeSegment[] {
     { key: "cancelled_onscene", label: "Cancelled On Scene",  value: cancelledOnScene, color: "#FB923C" },
   ];
 }
+
+export interface HospitalCount {
+  hospital: string;
+  count: number;
+}
+
+// Transported calls only, grouped by hospital, ranked most to least common.
+export function hospitalCounts(calls: CallRecord[]): HospitalCount[] {
+  const counts = new Map<string, number>();
+  for (const call of calls) {
+    if (!call.hospital) continue;
+    counts.set(call.hospital, (counts.get(call.hospital) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([hospital, count]) => ({ hospital, count }))
+    .sort((a, b) => b.count - a.count);
+}
