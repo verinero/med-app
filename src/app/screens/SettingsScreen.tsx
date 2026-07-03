@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Trash2, Lock, ArrowUp, ArrowDown } from "lucide-react";
 import { HOME_COLOR, ROUTES } from "../constants";
-import type { Hospital, Medication, InterventionDef } from "../../db";
+import type { CallRecord, Hospital, Medication, InterventionDef } from "../../db";
 import { PhoneShell } from "../components/PhoneShell";
 import { CurvedShelf } from "../components/CurvedShelf";
 import { SLabel } from "../components/SLabel";
@@ -9,7 +9,7 @@ import { FormCard } from "../components/FormCard";
 import { CardHead } from "../components/CardHead";
 import { BottomNav } from "../components/BottomNav";
 import { DeleteModal } from "../components/DeleteModal";
-import { eyebrow, textInputStyle } from "../styles";
+import { eyebrow, textInputStyle, primaryBtn } from "../styles";
 
 function ManageListCard({ label, items, placeholder, onAdd, onRequestDelete, onSetDefaultRoute }: {
   label: string; items: { id?: number; name: string; defaultRoute?: string }[]; placeholder: string;
@@ -158,7 +158,7 @@ function ManageInterventionsCard({ defs, onAdd, onRequestDelete, onSetNotesEnabl
             display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: "pointer", alignSelf: "flex-start",
           }}>
             <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${draftNotes ? HOME_COLOR.p : "#D1D5DB"}`, background: draftNotes ? HOME_COLOR.p : "#fff" }} />
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#6b7280" }}>Allow a note when toggled on</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#6b7280" }}>Enable Notes</span>
           </button>
 
           {items.length > 0 && (
@@ -186,13 +186,60 @@ function ManageInterventionsCard({ defs, onAdd, onRequestDelete, onSetNotesEnabl
                     display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: "pointer", alignSelf: "flex-start",
                   }}>
                     <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${item.notesEnabled ? HOME_COLOR.p : "#D1D5DB"}`, background: item.notesEnabled ? HOME_COLOR.p : "#fff" }} />
-                    <span style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af" }}>Allow a note when toggled on</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af" }}>Enable Notes</span>
                   </button>
                 </div>
               ))}
             </div>
           )}
         </>
+      )}
+    </FormCard>
+  );
+}
+
+function ImportCallsCard({ fileName, preview, errors, successCount, onFileSelected, onConfirm, onCancel }: {
+  fileName: string | null; preview: Omit<CallRecord, "id">[] | null; errors: string[]; successCount: number | null;
+  onFileSelected: (name: string, text: string) => void; onConfirm: () => void; onCancel: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => onFileSelected(file.name, reader.result as string);
+    reader.readAsText(file);
+    e.target.value = ""; // allow re-selecting the same file later
+  }
+  return (
+    <FormCard accent={HOME_COLOR.p}>
+      <CardHead color={HOME_COLOR.p} label="Import Calls" />
+      <p style={{ fontSize: 13, color: "#6b7280", margin: 0 }}>
+        Restore calls from a CSV file exported by this app. Imported calls are always added as new — nothing existing is overwritten.
+      </p>
+      <input ref={inputRef} type="file" accept=".csv" onChange={handleChange} style={{ display: "none" }} />
+      <button onClick={() => inputRef.current?.click()} style={{ ...primaryBtn, background: HOME_COLOR.p }}>
+        Choose CSV File
+      </button>
+
+      {errors.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 12, color: "#D32F2F" }}>
+          {errors.map((e, i) => <div key={i}>{e}</div>)}
+        </div>
+      )}
+
+      {preview && preview.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ fontSize: 13, color: "#0d1117" }}>Found <strong>{preview.length}</strong> call{preview.length === 1 ? "" : "s"} in <em>{fileName}</em>.</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={onCancel} style={{ flex: 1, padding: "12px 0", borderRadius: 12, border: "1.5px solid #E2E5EC", background: "#F8F9FC", fontSize: 14, fontWeight: 700, color: "#6b7280", cursor: "pointer" }}>Cancel</button>
+            <button onClick={onConfirm} style={{ flex: 1, padding: "12px 0", borderRadius: 12, border: "none", background: "#16A34A", fontSize: 14, fontWeight: 700, color: "#fff", cursor: "pointer" }}>Import {preview.length}</button>
+          </div>
+        </div>
+      )}
+
+      {successCount != null && (
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#16A34A" }}>Imported {successCount} call{successCount === 1 ? "" : "s"}.</div>
       )}
     </FormCard>
   );
@@ -208,6 +255,8 @@ export function SettingsScreen({
   interventionDefs, onAddIntervention, deleteInterventionTarget, deleteInterventionMessage,
   onRequestDeleteIntervention, onCancelDeleteIntervention, onConfirmDeleteIntervention,
   onSetInterventionNotesEnabled, onMoveIntervention,
+  importFileName, importPreview, importErrors, importSuccessCount,
+  onImportFileSelected, onConfirmImport, onCancelImport,
 }: {
   navTab: string; setNavTab: (t: string) => void;
   onHome: () => void; onStats: () => void; onExport: () => void; onNewCall: () => void;
@@ -223,6 +272,8 @@ export function SettingsScreen({
   deleteInterventionTarget: number | null; deleteInterventionMessage?: string;
   onRequestDeleteIntervention: (id: number) => void; onCancelDeleteIntervention: () => void; onConfirmDeleteIntervention: () => void;
   onSetInterventionNotesEnabled: (id: number, notesEnabled: boolean) => void; onMoveIntervention: (id: number, direction: "up" | "down") => void;
+  importFileName: string | null; importPreview: Omit<CallRecord, "id">[] | null; importErrors: string[]; importSuccessCount: number | null;
+  onImportFileSelected: (name: string, text: string) => void; onConfirmImport: () => void; onCancelImport: () => void;
 }) {
   return (
     <PhoneShell>
@@ -276,6 +327,10 @@ export function SettingsScreen({
           onMove={onMoveIntervention} />
 
         <SLabel>Data</SLabel>
+        <ImportCallsCard
+          fileName={importFileName} preview={importPreview} errors={importErrors} successCount={importSuccessCount}
+          onFileSelected={onImportFileSelected} onConfirm={onConfirmImport} onCancel={onCancelImport}
+        />
         <FormCard accent="#D32F2F">
           <CardHead color="#D32F2F" label="Danger Zone" />
           <p style={{ fontSize: 13, color: "#6b7280", margin: 0 }}>

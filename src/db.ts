@@ -176,7 +176,7 @@ export function callsToCSV(calls: CallRecord[]): string {
     "Allergies", "Med History", "Notes", "Call Status", "Hospital",
   ];
   const rows = calls.map(c => [
-    c.id ?? "", c.date, c.unitNum, c.unitType, c.mode, c.age, c.sex, `"${c.complaint}"`,
+    c.id ?? "", `"${c.date}"`, c.unitNum, c.unitType, c.mode, c.age, c.sex, `"${c.complaint}"`,
     c.hr, c.bp, c.spo2, c.rr, c.gcs, c.glucose,
     `"${interventionsSummary(c)}"`,
     c.oxyOn ? "Y" : "N", c.oxyType, c.oxyLiters,
@@ -195,4 +195,131 @@ export function downloadCSV(csv: string, filename: string) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// ── Import helpers ────────────────────────────────────────────
+// RFC4180-ish: handles quoted fields, commas inside quotes, doubled ""
+// escaping. No CSV library in this project — kept minimal rather than
+// adding a dependency for a single, narrowly-scoped import feature.
+export function parseCSVText(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += ch;
+    } else {
+      if (ch === '"') inQuotes = true;
+      else if (ch === ",") { row.push(field); field = ""; }
+      else if (ch === "\n" || ch === "\r") {
+        if (ch === "\r" && text[i + 1] === "\n") i++;
+        row.push(field); field = "";
+        if (row.length > 1 || row[0] !== "") rows.push(row);
+        row = [];
+      } else field += ch;
+    }
+  }
+  if (field !== "" || row.length > 0) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+// "5y 2m" -> {ageYears: "5", ageMonths: "2"}; mirrors the compose logic in
+// App.tsx's saveCall() in reverse.
+function parseAge(age: string): { ageYears: string; ageMonths: string } {
+  const yMatch = age.match(/(\d+)y/);
+  const mMatch = age.match(/(\d+)m/);
+  return { ageYears: yMatch?.[1] ?? "", ageMonths: mMatch?.[1] ?? "" };
+}
+
+// Inverse of medsSummary(): "Zofran (IV); Toradol (PO)" -> structured
+// entries. Bare names (legacy calls with no route recorded) default to
+// "IV", consistent with the app's IV fallback everywhere else.
+function parseMeds(summary: string): { name: string; route: string }[] {
+  if (!summary.trim()) return [];
+  return summary.split(";").map(s => s.trim()).filter(Boolean).map(entry => {
+    const match = entry.match(/^(.+?)\s\(([^)]+)\)$/);
+    return match ? { name: match[1], route: match[2] } : { name: entry, route: "IV" };
+  });
+}
+
+// Inverse of interventionsSummary(): "Backboard; 12-Lead ECG (STEMI)" ->
+// structured entries, note optional per-entry.
+function parseInterventions(summary: string): { name: string; note?: string }[] {
+  if (!summary.trim()) return [];
+  return summary.split(";").map(s => s.trim()).filter(Boolean).map(entry => {
+    const match = entry.match(/^(.+?)\s\(([^)]+)\)$/);
+    return match ? { name: match[1], note: match[2] } : { name: entry };
+  });
+}
+
+const REQUIRED_HEADERS = ["Date", "Unit", "Type", "Mode", "Complaint"];
+
+// Parses a CSV produced by callsToCSV() back into importable call records.
+// The CSV's ID column is always discarded — every row becomes a brand-new
+// call (Dexie assigns a fresh id) so import can never overwrite existing
+// data. Per-row errors are collected rather than thrown, so one bad row
+// doesn't block the rest of the file.
+export function csvToCallRecords(text: string): { records: Omit<CallRecord, "id">[]; errors: string[] } {
+  const rows = parseCSVText(text);
+  if (rows.length === 0) return { records: [], errors: ["File is empty."] };
+
+  const header = rows[0];
+  const col = (name: string) => header.indexOf(name);
+  const missing = REQUIRED_HEADERS.filter(h => col(h) === -1);
+  if (missing.length > 0) {
+    return { records: [], errors: [`This doesn't look like a call export from this app (missing columns: ${missing.join(", ")}).`] };
+  }
+
+  const records: Omit<CallRecord, "id">[] = [];
+  const errors: string[] = [];
+  const get = (r: string[], name: string) => (col(name) === -1 ? "" : (r[col(name)] ?? ""));
+
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (r.length < header.length - 5) { // tolerate a few trailing-blank-column mismatches
+      errors.push(`Row ${i + 1}: too few columns, skipped.`);
+      continue;
+    }
+    const dateStr = get(r, "Date");
+    const timestamp = Date.parse(dateStr);
+    if (isNaN(timestamp)) { errors.push(`Row ${i + 1}: unparseable date "${dateStr}", skipped.`); continue; }
+
+    const mode = get(r, "Mode");
+    if (mode !== "trauma" && mode !== "medical") { errors.push(`Row ${i + 1}: unknown mode "${mode}", skipped.`); continue; }
+
+    const { ageYears, ageMonths } = parseAge(get(r, "Age"));
+    const hospital = get(r, "Hospital") || undefined;
+
+    records.push({
+      date: dateStr, timestamp,
+      unitNum: get(r, "Unit"), unitType: get(r, "Type"),
+      mode, age: get(r, "Age"), ageYears, ageMonths,
+      sex: get(r, "Sex"), complaint: get(r, "Complaint"),
+      hr: get(r, "HR"), bp: get(r, "BP"), spo2: get(r, "SpO2"), rr: get(r, "RR"),
+      gcs: get(r, "GCS"), glucose: get(r, "Glucose"),
+      alertOriented: "", // not in the export, no way to recover
+      interventions: parseInterventions(get(r, "Interventions")),
+      oxyOn: get(r, "Oxygen") === "Y", oxyType: get(r, "O2 Type"),
+      oxyLiters: parseFloat(get(r, "O2 Liters")) || 0,
+      medOn: get(r, "Medication") === "Y",
+      salineAmt: parseInt(get(r, "Saline(mL)"), 10) || 0,
+      lrAmt: parseInt(get(r, "LR(mL)"), 10) || 0,
+      zofran: false, toradol: false,
+      meds: parseMeds(get(r, "Medications")),
+      ivOn: get(r, "IV") === "Y", gauge: get(r, "Gauge"), ivLR: get(r, "IV Side"), ivSite: get(r, "IV Site"),
+      ivEstablished: get(r, "IV Established") === "" ? undefined : get(r, "IV Established") === "Y",
+      ivAttempts: get(r, "IV Attempts") || undefined,
+      allergies: get(r, "Allergies"), medHistory: get(r, "Med History"), notes: get(r, "Notes"),
+      callStatus: get(r, "Call Status") || undefined,
+      techedCall: false, acuity: "",
+      hospital, transportMode: hospital ? "hospital" : "",
+      locked: false,
+    });
+  }
+  return { records, errors };
 }

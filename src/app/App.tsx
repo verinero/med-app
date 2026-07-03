@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { db, callsToCSV, downloadCSV, medsSummary, interventionsSummary, type CallRecord, type Shift, type Hospital, type Medication, type InterventionDef } from "../db";
+import { db, callsToCSV, downloadCSV, medsSummary, interventionsSummary, csvToCallRecords, type CallRecord, type Shift, type Hospital, type Medication, type InterventionDef } from "../db";
 import { HOME_COLOR, TH, T_CHIPS, M_CHIPS, HOSPITALS, DEFAULT_MEDS, DEFAULT_INTERVENTIONS, type Screen } from "./constants";
 import { blankForm, callToForm, dateStr, dateStrFor, sevenDaysAgo, type CallForm } from "./callForm";
 import { blankShiftDraft, toDatetimeLocalValue, fromDatetimeLocalValue, type ShiftDraft } from "./shiftForm";
@@ -52,6 +52,11 @@ export default function App() {
   const [interventionDefs, setInterventionDefs] = useState<InterventionDef[]>([]);
   const [deleteInterventionTarget, setDeleteInterventionTarget] = useState<number | null>(null);
 
+  const [importFileName, setImportFileName] = useState<string | null>(null);
+  const [importPreview, setImportPreview] = useState<Omit<CallRecord, "id">[] | null>(null);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [importSuccessCount, setImportSuccessCount] = useState<number | null>(null);
+
   useEffect(() => {
     async function init() {
       const [calls, all, allShifts] = await Promise.all([
@@ -81,6 +86,20 @@ export default function App() {
       if (interventionRows.length === 0) {
         await db.interventions.bulkAdd(DEFAULT_INTERVENTIONS.map((d, order) => ({ ...d, order })));
         interventionRows = await db.interventions.toArray();
+      }
+      // Self-heal duplicate seed rows (e.g. React StrictMode double-invoking
+      // this effect in dev can race two "table is empty" checks before
+      // either bulkAdd lands, seeding the defaults twice).
+      const seenKeys = new Set<string>();
+      const dupIds: number[] = [];
+      for (const row of [...interventionRows].sort((a, b) => (a.id ?? 0) - (b.id ?? 0))) {
+        const key = `${row.mode}::${row.name.toLowerCase()}`;
+        if (seenKeys.has(key)) { if (row.id != null) dupIds.push(row.id); }
+        else seenKeys.add(key);
+      }
+      if (dupIds.length > 0) {
+        await db.interventions.bulkDelete(dupIds);
+        interventionRows = interventionRows.filter(r => r.id == null || !dupIds.includes(r.id));
       }
       setInterventionDefs(interventionRows.sort((a, b) => a.order - b.order));
     }
@@ -346,6 +365,38 @@ export default function App() {
     setSavedCalls(updated);
     setAllCalls(all);
     setDeleteTarget(null);
+  }
+
+  // ── CSV Import (Settings) ──────────────────────────────────
+  // Import always creates new calls — the CSV's ID column is discarded
+  // (parsed out already in csvToCallRecords), so re-importing the same
+  // file can never overwrite or corrupt an existing record.
+  function handleImportFileSelected(fileName: string, text: string) {
+    const { records, errors } = csvToCallRecords(text);
+    setImportFileName(fileName);
+    setImportPreview(records);
+    setImportErrors(errors);
+    setImportSuccessCount(null);
+  }
+
+  async function confirmImport() {
+    if (!importPreview || importPreview.length === 0) return;
+    await db.calls.bulkAdd(importPreview as CallRecord[]);
+    const [updated, all] = await Promise.all([
+      db.calls.orderBy("timestamp").reverse().limit(100).toArray(),
+      db.calls.toArray(),
+    ]);
+    setSavedCalls(updated);
+    setAllCalls(all);
+    setImportSuccessCount(importPreview.length);
+    setImportPreview(null);
+    setImportFileName(null);
+  }
+
+  function cancelImport() {
+    setImportFileName(null);
+    setImportPreview(null);
+    setImportErrors([]);
   }
 
   // ── Hospitals (Settings) ───────────────────────────────────
@@ -653,6 +704,13 @@ export default function App() {
         onConfirmDeleteIntervention={confirmDeleteIntervention}
         onSetInterventionNotesEnabled={setInterventionNotesEnabled}
         onMoveIntervention={moveIntervention}
+        importFileName={importFileName}
+        importPreview={importPreview}
+        importErrors={importErrors}
+        importSuccessCount={importSuccessCount}
+        onImportFileSelected={handleImportFileSelected}
+        onConfirmImport={confirmImport}
+        onCancelImport={cancelImport}
       />
     );
   }
