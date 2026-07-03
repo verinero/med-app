@@ -3,7 +3,7 @@ import { db, callsToCSV, downloadCSV, type CallRecord, type Shift } from "../db"
 import { HOME_COLOR, TH, T_CHIPS, M_CHIPS, type Screen } from "./constants";
 import { blankForm, callToForm, dateStr, dateStrFor, sevenDaysAgo, type CallForm } from "./callForm";
 import { blankShiftDraft, toDatetimeLocalValue, fromDatetimeLocalValue, type ShiftDraft } from "./shiftForm";
-import { callOutcomeSegments, hospitalCounts, ivSuccessStats, techedByUnitType as computeTechedByUnitType } from "./callStats";
+import { callOutcomeSegments, hospitalCounts, ivSuccessStats, techedByUnitType as computeTechedByUnitType, acuitySegments } from "./callStats";
 import { shiftSummaries, shiftsByUnitType as computeShiftsByUnitType, hoursByUnitType as computeHoursByUnitType } from "./shiftStats";
 import { formatDuration } from "./shiftStats";
 import { ExportScreen } from "./screens/ExportScreen";
@@ -15,7 +15,7 @@ import { SettingsScreen } from "./screens/SettingsScreen";
 // ══════════════════════════════════════════════════════════════
 export default function App() {
   const [screen,    setScreen]    = useState<Screen>("home");
-  const [navTab,    setNavTab]    = useState("stats");
+  const [navTab,    setNavTab]    = useState("activity");
 
   const [deleteTarget,      setDeleteTarget]      = useState<number | null>(null);
   const [editingCallId,     setEditingCallId]     = useState<number | null>(null);
@@ -85,6 +85,7 @@ export default function App() {
   const shiftsByUnitType = useMemo(() => computeShiftsByUnitType(shifts), [shifts]);
   const hoursByUnitType  = useMemo(() => computeHoursByUnitType(shifts), [shifts]);
   const techedByUnitType = useMemo(() => computeTechedByUnitType(allCalls), [allCalls]);
+  const acuityData       = useMemo(() => acuitySegments(allCalls), [allCalls]);
 
   // Most recently started shift (by startTime) — used to prefill new shifts/calls.
   const mostRecentShift = useMemo(() =>
@@ -414,6 +415,7 @@ export default function App() {
         shiftsByUnitType={shiftsByUnitType}
         hoursByUnitType={hoursByUnitType}
         techedByUnitType={techedByUnitType}
+        acuityData={acuityData}
         navTab={navTab}
         setNavTab={setNavTab}
         onHome={() => setScreen("home")}

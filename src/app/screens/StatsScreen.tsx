@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { HOME_COLOR } from "../constants";
-import type { CallOutcomeSegment, HospitalCount, IvSuccessStats, TechedByUnitTypeSegment } from "../callStats";
+import type { CallOutcomeSegment, HospitalCount, IvSuccessStats, TechedByUnitTypeSegment, AcuitySegment } from "../callStats";
 import type { ShiftSummary, UnitTypeSegment } from "../shiftStats";
 import type { ShiftDraft, SetShiftFld } from "../shiftForm";
 import { PhoneShell } from "../components/PhoneShell";
@@ -20,7 +20,7 @@ import { ShiftHistoryList } from "../components/ShiftHistoryList";
 import { eyebrow } from "../styles";
 
 export function StatsScreen({
-  totalCalls, outcomeSegments, hospitalData, ivStats, shiftHistory, shiftsByUnitType, hoursByUnitType, techedByUnitType,
+  totalCalls, outcomeSegments, hospitalData, ivStats, shiftHistory, shiftsByUnitType, hoursByUnitType, techedByUnitType, acuityData,
   navTab, setNavTab, onHome, onExport, onNewCall, onSettings,
   pillUnitLabel, pillElapsedLabel,
   showShiftManager, shiftManagerTab, setShiftManagerTab, shiftDraft, setShiftFld, editingShiftId,
@@ -28,7 +28,7 @@ export function StatsScreen({
   deleteShiftTarget, onRequestDeleteShift, onCancelDeleteShift, onConfirmDeleteShift,
 }: {
   totalCalls: number; outcomeSegments: CallOutcomeSegment[]; hospitalData: HospitalCount[]; ivStats: IvSuccessStats; shiftHistory: ShiftSummary[];
-  shiftsByUnitType: UnitTypeSegment[]; hoursByUnitType: UnitTypeSegment[]; techedByUnitType: TechedByUnitTypeSegment[];
+  shiftsByUnitType: UnitTypeSegment[]; hoursByUnitType: UnitTypeSegment[]; techedByUnitType: TechedByUnitTypeSegment[]; acuityData: AcuitySegment[];
   navTab: string; setNavTab: (t: string) => void;
   onHome: () => void; onExport: () => void; onNewCall: () => void; onSettings: () => void;
   pillUnitLabel: string | null; pillElapsedLabel?: string;
@@ -66,6 +66,12 @@ export function StatsScreen({
         <FormCard accent={HOME_COLOR.p}>
           <CardHead color={HOME_COLOR.p} label="All-Time Breakdown" />
           <CallOutcomeDonut total={totalCalls} segments={outcomeSegments} />
+        </FormCard>
+
+        <SLabel>Patient Acuity</SLabel>
+        <FormCard accent={HOME_COLOR.p}>
+          <CardHead color={HOME_COLOR.p} label="Calls by Acuity" />
+          <UnitTypeStackedBar segments={acuityData} />
         </FormCard>
 
         <SLabel>Hospitals</SLabel>

@@ -84,6 +84,39 @@ export function techedByUnitType(calls: CallRecord[]): TechedByUnitTypeSegment[]
   });
 }
 
+export interface AcuitySegment {
+  key: string;
+  label: string;
+  value: number;
+  color: string;
+}
+
+const ACUITY_ORDER = ["low", "emergent", "critical"] as const;
+const ACUITY_LABELS: Record<string, string> = {
+  low: "Low Acuity",
+  emergent: "Emergent",
+  critical: "Critical",
+};
+// Same colors as the Acuity tab toggle in the call form, for consistency.
+const ACUITY_COLORS: Record<string, string> = {
+  low: "#16A34A",
+  emergent: "#D97706",
+  critical: "#DC2626",
+};
+
+// Calls with no acuity set are excluded, same as shiftsByUnitType has no
+// "unset" bucket — a shift always has a unit type, and here we only chart
+// the calls that were actually triaged.
+export function acuitySegments(calls: CallRecord[]): AcuitySegment[] {
+  const counts = new Map<string, number>();
+  for (const call of calls) {
+    if (call.acuity) counts.set(call.acuity, (counts.get(call.acuity) ?? 0) + 1);
+  }
+  return ACUITY_ORDER.map(a => ({
+    key: a, label: ACUITY_LABELS[a], value: counts.get(a) ?? 0, color: ACUITY_COLORS[a],
+  }));
+}
+
 export interface HospitalCount {
   hospital: string;
   count: number;
