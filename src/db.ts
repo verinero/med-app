@@ -23,11 +23,14 @@ export interface CallRecord {
   gcs: string;
   glucose: string;
   alertOriented: string;
-  // trauma interventions
-  tCspine: boolean;
-  tBackboard: boolean;
-  tSplint: boolean;
-  tBandage: boolean;
+  // trauma interventions — legacy booleans, kept unwritten-but-readable for
+  // old records' CSV export now that `interventions` below is the live field
+  tCspine?: boolean;
+  tBackboard?: boolean;
+  tSplint?: boolean;
+  tBandage?: boolean;
+  // customizable interventions (excludes Oxygen/Medication, which are fixed)
+  interventions?: { name: string; note?: string }[];
   // oxygen
   oxyOn: boolean;
   oxyType: string;
@@ -39,9 +42,9 @@ export interface CallRecord {
   zofran: boolean;
   toradol: boolean;
   meds?: { name: string; route: string }[];
-  // 12-lead
-  leadOn: boolean;
-  leadInterp: string;
+  // 12-lead — legacy, kept unwritten-but-readable (see `interventions` above)
+  leadOn?: boolean;
+  leadInterp?: string;
   // IV
   ivOn: boolean;
   gauge: string;
@@ -87,12 +90,23 @@ export interface Medication {
   defaultRoute?: string;
 }
 
+// A customizable intervention definition (excludes Oxygen/Medication, which
+// are always-present and not part of this list — see DEFAULT_INTERVENTIONS).
+export interface InterventionDef {
+  id?: number;
+  name: string;
+  mode: "trauma" | "medical";
+  notesEnabled?: boolean;
+  order: number;
+}
+
 class EMSDatabase extends Dexie {
   calls!: Table<CallRecord>;
   shifts!: Table<Shift>;
   settings!: Table<Settings>;
   hospitals!: Table<Hospital>;
   medications!: Table<Medication>;
+  interventions!: Table<InterventionDef>;
 
   constructor() {
     super("emsDatabase");
@@ -107,6 +121,14 @@ class EMSDatabase extends Dexie {
       settings: "++id, key",
       hospitals: "++id, &name",
       medications: "++id, &name",
+    });
+    this.version(3).stores({
+      calls: "++id, timestamp, shiftId, mode, date",
+      shifts: "++id, startTime",
+      settings: "++id, key",
+      hospitals: "++id, &name",
+      medications: "++id, &name",
+      interventions: "++id, mode, order",
     });
   }
 }
@@ -125,24 +147,40 @@ export function medsSummary(c: CallRecord): string {
   return legacy.join("; ");
 }
 
+// Calls saved before the customizable intervention list existed only
+// recorded the fixed trauma booleans and the 12-Lead pair — those are
+// rendered from the legacy fields so historical exports still show what
+// was done.
+export function interventionsSummary(c: CallRecord): string {
+  if (c.interventions && c.interventions.length > 0) {
+    return c.interventions.map(i => i.note ? `${i.name} (${i.note})` : i.name).join("; ");
+  }
+  const legacy = [
+    c.tCspine ? "C-Spine Immobilization" : "",
+    c.tBackboard ? "Backboard" : "",
+    c.tSplint ? "Extremity Splinting" : "",
+    c.tBandage ? "Bandaging" : "",
+    c.leadOn ? (c.leadInterp ? `12-Lead ECG (${c.leadInterp})` : "12-Lead ECG") : "",
+  ].filter(Boolean);
+  return legacy.join("; ");
+}
+
 export function callsToCSV(calls: CallRecord[]): string {
   const headers = [
     "ID", "Date", "Unit", "Type", "Mode", "Age", "Sex", "Complaint",
     "HR", "BP", "SpO2", "RR", "GCS", "Glucose",
-    "C-Spine", "Backboard", "Splinting", "Bandaging",
+    "Interventions",
     "Oxygen", "O2 Type", "O2 Liters",
     "Medication", "Saline(mL)", "LR(mL)", "Medications",
-    "12-Lead", "ECG Interp",
     "IV", "Gauge", "IV Side", "IV Site", "IV Established", "IV Attempts",
     "Allergies", "Med History", "Notes", "Call Status", "Hospital",
   ];
   const rows = calls.map(c => [
     c.id ?? "", c.date, c.unitNum, c.unitType, c.mode, c.age, c.sex, `"${c.complaint}"`,
     c.hr, c.bp, c.spo2, c.rr, c.gcs, c.glucose,
-    c.tCspine ? "Y" : "N", c.tBackboard ? "Y" : "N", c.tSplint ? "Y" : "N", c.tBandage ? "Y" : "N",
+    `"${interventionsSummary(c)}"`,
     c.oxyOn ? "Y" : "N", c.oxyType, c.oxyLiters,
     c.medOn ? "Y" : "N", c.salineAmt, c.lrAmt, `"${medsSummary(c)}"`,
-    c.leadOn ? "Y" : "N", `"${c.leadInterp}"`,
     c.ivOn ? "Y" : "N", c.gauge, c.ivLR, c.ivSite, c.ivOn ? (c.ivEstablished ? "Y" : "N") : "", c.ivAttempts || "",
     `"${c.allergies}"`, `"${c.medHistory}"`, `"${c.notes}"`, c.callStatus || "", c.hospital || "",
   ]);

@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Trash2, Lock, ArrowUp, ArrowDown } from "lucide-react";
 import { HOME_COLOR, ROUTES } from "../constants";
-import type { Hospital, Medication } from "../../db";
+import type { Hospital, Medication, InterventionDef } from "../../db";
 import { PhoneShell } from "../components/PhoneShell";
 import { CurvedShelf } from "../components/CurvedShelf";
 import { SLabel } from "../components/SLabel";
@@ -82,6 +82,122 @@ function ManageListCard({ label, items, placeholder, onAdd, onRequestDelete, onS
   );
 }
 
+const LOCKED_ROWS = ["Oxygen", "Medication"];
+
+function LockedInterventionRow({ name }: { name: string }) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+      padding: "9px 12px", background: "#F2F3F7", borderRadius: 10, border: "1px solid #E2E5EC",
+    }}>
+      <span style={{ fontSize: 13, fontWeight: 600, color: "#6b7280" }}>{name}</span>
+      <div title="Always included, cannot be removed" style={{ display: "flex", alignItems: "center", gap: 4, color: "#9ca3af" }}>
+        <Lock size={12} />
+        <span style={{ fontSize: 10, fontWeight: 700 }}>Locked</span>
+      </div>
+    </div>
+  );
+}
+
+function ManageInterventionsCard({ defs, onAdd, onRequestDelete, onSetNotesEnabled, onMove }: {
+  defs: InterventionDef[];
+  onAdd: (mode: "trauma" | "medical", name: string, notesEnabled: boolean) => void;
+  onRequestDelete: (id: number) => void;
+  onSetNotesEnabled: (id: number, notesEnabled: boolean) => void;
+  onMove: (id: number, direction: "up" | "down") => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"trauma" | "medical">("trauma");
+  const [draft, setDraft] = useState("");
+  const [draftNotes, setDraftNotes] = useState(false);
+
+  const items = defs.filter(d => d.mode === mode).sort((a, b) => a.order - b.order);
+
+  function submit() {
+    if (!draft.trim()) return;
+    onAdd(mode, draft, draftNotes);
+    setDraft("");
+    setDraftNotes(false);
+  }
+
+  return (
+    <FormCard accent={HOME_COLOR.p}>
+      <button onClick={() => setOpen(o => !o)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", padding: 0, cursor: "pointer", width: "100%" }}>
+        <CardHead color={HOME_COLOR.p} label="Manage Interventions" />
+        {open ? <ChevronUp size={16} color="#9ca3af" /> : <ChevronDown size={16} color="#9ca3af" />}
+      </button>
+      {open && (
+        <>
+          <div style={{ background: "#F2F3F7", borderRadius: 11, padding: 3, display: "flex" }}>
+            {(["trauma", "medical"] as const).map(m => (
+              <button key={m} onClick={() => setMode(m)} style={{
+                flex: 1, padding: "8px 0", borderRadius: 8, border: "none", cursor: "pointer",
+                fontSize: 13, fontWeight: 700, textTransform: "capitalize", transition: "all 0.2s",
+                background: mode === m ? "#fff" : "transparent",
+                color: mode === m ? HOME_COLOR.p : "#6b7280",
+                boxShadow: mode === m ? "0 1px 6px rgba(0,0,0,0.1)" : "none",
+              }}>{m}</button>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {LOCKED_ROWS.map(name => <LockedInterventionRow key={name} name={name} />)}
+          </div>
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <input type="text" value={draft} onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") submit(); }}
+              placeholder={mode === "trauma" ? "e.g. Tourniquet" : "e.g. Nebulizer Treatment"}
+              style={{ ...textInputStyle, flex: 1 }} />
+            <button onClick={submit} style={{
+              padding: "0 18px", border: "none", borderRadius: 11,
+              background: HOME_COLOR.p, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
+            }}>Add</button>
+          </div>
+          <button onClick={() => setDraftNotes(n => !n)} style={{
+            display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: "pointer", alignSelf: "flex-start",
+          }}>
+            <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${draftNotes ? HOME_COLOR.p : "#D1D5DB"}`, background: draftNotes ? HOME_COLOR.p : "#fff" }} />
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#6b7280" }}>Allow a note when toggled on</span>
+          </button>
+
+          {items.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+              {items.map((item, i) => (
+                <div key={item.id} style={{
+                  display: "flex", flexDirection: "column", gap: 8,
+                  padding: "9px 12px", background: "#F8F9FC", borderRadius: 10, border: "1px solid #ECEEF2",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#0d1117" }}>{item.name}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+                      <button onClick={() => onMove(item.id!, "up")} disabled={i === 0} style={{ background: "none", border: "none", cursor: i === 0 ? "default" : "pointer", padding: "4px", display: "flex", opacity: i === 0 ? 0.3 : 1 }}>
+                        <ArrowUp size={14} color="#6b7280" />
+                      </button>
+                      <button onClick={() => onMove(item.id!, "down")} disabled={i === items.length - 1} style={{ background: "none", border: "none", cursor: i === items.length - 1 ? "default" : "pointer", padding: "4px", display: "flex", opacity: i === items.length - 1 ? 0.3 : 1 }}>
+                        <ArrowDown size={14} color="#6b7280" />
+                      </button>
+                      <button onClick={() => item.id != null && onRequestDelete(item.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", display: "flex" }}>
+                        <Trash2 size={14} color="#D1D5DB" />
+                      </button>
+                    </div>
+                  </div>
+                  <button onClick={() => item.id != null && onSetNotesEnabled(item.id, !item.notesEnabled)} style={{
+                    display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, cursor: "pointer", alignSelf: "flex-start",
+                  }}>
+                    <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${item.notesEnabled ? HOME_COLOR.p : "#D1D5DB"}`, background: item.notesEnabled ? HOME_COLOR.p : "#fff" }} />
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af" }}>Allow a note when toggled on</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </FormCard>
+  );
+}
+
 export function SettingsScreen({
   navTab, setNavTab, onHome, onStats, onExport, onNewCall,
   showClearDataConfirm, onRequestClearData, onCancelClearData, onConfirmClearData,
@@ -89,6 +205,9 @@ export function SettingsScreen({
   onRequestDeleteHospital, onCancelDeleteHospital, onConfirmDeleteHospital,
   medications, onAddMedication, deleteMedicationTarget, deleteMedicationMessage,
   onRequestDeleteMedication, onCancelDeleteMedication, onConfirmDeleteMedication, onSetMedicationDefaultRoute,
+  interventionDefs, onAddIntervention, deleteInterventionTarget, deleteInterventionMessage,
+  onRequestDeleteIntervention, onCancelDeleteIntervention, onConfirmDeleteIntervention,
+  onSetInterventionNotesEnabled, onMoveIntervention,
 }: {
   navTab: string; setNavTab: (t: string) => void;
   onHome: () => void; onStats: () => void; onExport: () => void; onNewCall: () => void;
@@ -100,6 +219,10 @@ export function SettingsScreen({
   deleteMedicationTarget: number | null; deleteMedicationMessage?: string;
   onRequestDeleteMedication: (id: number) => void; onCancelDeleteMedication: () => void; onConfirmDeleteMedication: () => void;
   onSetMedicationDefaultRoute: (id: number, route: string) => void;
+  interventionDefs: InterventionDef[]; onAddIntervention: (mode: "trauma" | "medical", name: string, notesEnabled: boolean) => void;
+  deleteInterventionTarget: number | null; deleteInterventionMessage?: string;
+  onRequestDeleteIntervention: (id: number) => void; onCancelDeleteIntervention: () => void; onConfirmDeleteIntervention: () => void;
+  onSetInterventionNotesEnabled: (id: number, notesEnabled: boolean) => void; onMoveIntervention: (id: number, direction: "up" | "down") => void;
 }) {
   return (
     <PhoneShell>
@@ -125,6 +248,13 @@ export function SettingsScreen({
         onCancel={onCancelDeleteMedication}
         onConfirm={onConfirmDeleteMedication}
       />
+      <DeleteModal
+        show={deleteInterventionTarget != null}
+        title="Delete this intervention?"
+        message={deleteInterventionMessage}
+        onCancel={onCancelDeleteIntervention}
+        onConfirm={onConfirmDeleteIntervention}
+      />
       <div style={{ background: HOME_COLOR.p, padding: "16px 20px 18px" }}>
         <div style={eyebrow}>EMS Dashboard</div>
         <h1 style={{ margin: 0, color: "#fff", fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.1 }}>Settings</h1>
@@ -139,6 +269,11 @@ export function SettingsScreen({
         <SLabel>Medications</SLabel>
         <ManageListCard label="Manage Medications" items={medications} placeholder="e.g. Fentanyl"
           onAdd={onAddMedication} onRequestDelete={onRequestDeleteMedication} onSetDefaultRoute={onSetMedicationDefaultRoute} />
+
+        <SLabel>Interventions</SLabel>
+        <ManageInterventionsCard defs={interventionDefs} onAdd={onAddIntervention}
+          onRequestDelete={onRequestDeleteIntervention} onSetNotesEnabled={onSetInterventionNotesEnabled}
+          onMove={onMoveIntervention} />
 
         <SLabel>Data</SLabel>
         <FormCard accent="#D32F2F">

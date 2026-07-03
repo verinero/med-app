@@ -1,5 +1,5 @@
 import { Minus, Plus } from "lucide-react";
-import type { Medication } from "../../../db";
+import type { Medication, InterventionDef } from "../../../db";
 import { OXY_T, ROUTES, type ThemeColors } from "../../constants";
 import type { CallForm, SetFld } from "../../callForm";
 import { FormCard } from "../../components/FormCard";
@@ -7,21 +7,48 @@ import { CardHead } from "../../components/CardHead";
 import { IntRow } from "../../components/IntRow";
 import { FluidRow } from "../../components/FluidRow";
 import { MedicationRow } from "../../components/MedicationRow";
-import { microLabel, stepperBtn } from "../../styles";
+import { microLabel, stepperBtn, textInputStyle } from "../../styles";
 
-export function InterventionsCard({ f, setFld, c, medications }: { f: CallForm; setFld: SetFld; c: ThemeColors; medications: Medication[] }) {
+export function InterventionsCard({ f, setFld, c, medications, interventionDefs }: {
+  f: CallForm; setFld: SetFld; c: ThemeColors; medications: Medication[]; interventionDefs: InterventionDef[];
+}) {
+  const defs = interventionDefs.filter(d => d.mode === f.mode).sort((a, b) => a.order - b.order);
+
+  function toggleIntervention(name: string) {
+    const entry = f.interventions.find(i => i.name === name);
+    if (entry) setFld("interventions", f.interventions.filter(i => i.name !== name));
+    else setFld("interventions", [...f.interventions, { name, note: "" }]);
+  }
+  function setInterventionNote(name: string, note: string) {
+    setFld("interventions", f.interventions.map(i => i.name === name ? { ...i, note } : i));
+  }
+  function toggleExpanded(name: string) {
+    const open = f.expandedInterventions.includes(name);
+    setFld("expandedInterventions", open ? f.expandedInterventions.filter(n => n !== name) : [...f.expandedInterventions, name]);
+  }
+
   return (
     <FormCard accent={c.p}>
       <CardHead color={c.p} label="Interventions" />
       <div style={{ borderRadius: 12, border: "1.5px solid #ECEEF2", overflow: "visible" }}>
-        {f.mode === "trauma" && (
-          <>
-            <IntRow enabled={f.tCspine}    onToggle={() => setFld("tCspine", !f.tCspine)}       label="C-Spine Immobilization" color={c.p} />
-            <IntRow enabled={f.tBackboard} onToggle={() => setFld("tBackboard", !f.tBackboard)} label="Backboard"              color={c.p} />
-            <IntRow enabled={f.tSplint}    onToggle={() => setFld("tSplint", !f.tSplint)}       label="Extremity Splinting"    color={c.p} />
-            <IntRow enabled={f.tBandage}   onToggle={() => setFld("tBandage", !f.tBandage)}     label="Bandaging"              color={c.p} />
-          </>
-        )}
+        {defs.map(def => {
+          const entry = f.interventions.find(i => i.name === def.name);
+          const enabled = !!entry;
+          return (
+            <IntRow key={def.id} enabled={enabled} onToggle={() => toggleIntervention(def.name)} label={def.name} color={c.p}
+              expandable={def.notesEnabled} expanded={f.expandedInterventions.includes(def.name)}
+              onToggleExpand={() => toggleExpanded(def.name)}>
+              {def.notesEnabled && (
+                <div style={{ padding: "2px 12px 14px 46px" }}>
+                  <span style={{ ...microLabel, display: "block", marginBottom: 6 }}>NOTES</span>
+                  <textarea placeholder="Add a note…" value={entry?.note ?? ""}
+                    onChange={e => setInterventionNote(def.name, e.target.value)} rows={3}
+                    style={{ ...textInputStyle, width: "100%", boxSizing: "border-box", resize: "none", fontFamily: "'Inter', sans-serif", lineHeight: 1.5 }} />
+                </div>
+              )}
+            </IntRow>
+          );
+        })}
 
         <IntRow enabled={f.oxyOn} onToggle={() => { const n = !f.oxyOn; setFld("oxyOn", n); if (n) setFld("oxyOpen", true); }}
           label="Oxygen" color={c.p} expandable expanded={f.oxyOpen} onToggleExpand={() => setFld("oxyOpen", !f.oxyOpen)}>
@@ -50,7 +77,7 @@ export function InterventionsCard({ f, setFld, c, medications }: { f: CallForm; 
 
         <IntRow enabled={f.medOn} onToggle={() => { const n = !f.medOn; setFld("medOn", n); if (n) setFld("medOpen", true); }}
           label="Medication" color={c.p} expandable expanded={f.medOpen} onToggleExpand={() => setFld("medOpen", !f.medOpen)}
-          last={f.mode !== "medical"}>
+          last>
           <div style={{ padding: "2px 12px 14px 46px", display: "flex", flexDirection: "column", gap: 10 }}>
             <FluidRow label="Saline" value={f.salineAmt} onChange={v => setFld("salineAmt", v)} color={c.p} light={c.l} />
             <FluidRow label="LR"     value={f.lrAmt}     onChange={v => setFld("lrAmt", v)}     color={c.p} light={c.l} />
@@ -73,18 +100,6 @@ export function InterventionsCard({ f, setFld, c, medications }: { f: CallForm; 
             </div>
           </div>
         </IntRow>
-
-        {f.mode === "medical" && (
-          <IntRow enabled={f.leadOn} onToggle={() => { const n = !f.leadOn; setFld("leadOn", n); if (n) setFld("leadOpen", true); }}
-            label="12-Lead ECG" color={c.p} expandable expanded={f.leadOpen} onToggleExpand={() => setFld("leadOpen", !f.leadOpen)} last>
-            <div style={{ padding: "2px 12px 14px 46px" }}>
-              <span style={{ ...microLabel, display: "block", marginBottom: 6 }}>INTERPRETATION</span>
-              <textarea placeholder="e.g. Normal sinus rhythm, STEMI inferior…" value={f.leadInterp}
-                onChange={e => setFld("leadInterp", e.target.value)} rows={3}
-                style={{ width: "100%", boxSizing: "border-box", background: "#F8F9FC", border: "1.5px solid #E2E5EC", borderRadius: 10, padding: "9px 12px", fontSize: 13, color: "#0d1117", outline: "none", resize: "none", fontFamily: "'Inter', sans-serif", lineHeight: 1.5 }} />
-            </div>
-          </IntRow>
-        )}
       </div>
     </FormCard>
   );

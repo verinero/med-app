@@ -4,14 +4,13 @@ import { PhoneShell } from "../components/PhoneShell";
 import { CurvedShelf } from "../components/CurvedShelf";
 import { FormCard } from "../components/FormCard";
 import { CardHead } from "../components/CardHead";
-import { StatCard } from "../components/StatCard";
 import { BottomNav } from "../components/BottomNav";
 import { primaryBtn } from "../styles";
 
 export function ExportScreen({
-  totalCalls, ivsTotal, medsTotal, navTab, setNavTab, onHome, onNewCall, onStats, onSettings, onExportCSV, onExportPDF,
+  totalCalls, navTab, setNavTab, onHome, onNewCall, onStats, onSettings, onExportCSV, onExportPDF,
 }: {
-  totalCalls: number; ivsTotal: number; medsTotal: number;
+  totalCalls: number;
   navTab: string; setNavTab: (t: string) => void;
   onHome: () => void; onNewCall: () => void; onStats: () => void; onSettings: () => void;
   onExportCSV: () => void; onExportPDF: () => void;
@@ -33,14 +32,6 @@ export function ExportScreen({
           <button onClick={onExportPDF} style={{ ...primaryBtn, background: HOME_COLOR.p, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             <Download size={16} color="#fff" /> Export as PDF
           </button>
-        </FormCard>
-        <FormCard accent={HOME_COLOR.p}>
-          <CardHead color={HOME_COLOR.p} label="Stats" />
-          <div style={{ display: "flex", gap: 8 }}>
-            <StatCard label="Total" value={totalCalls} color={HOME_COLOR.p} light={HOME_COLOR.l} />
-            <StatCard label="IVs"   value={ivsTotal}    color={HOME_COLOR.p} light={HOME_COLOR.l} />
-            <StatCard label="Meds"  value={medsTotal}   color={HOME_COLOR.p} light={HOME_COLOR.l} />
-          </div>
         </FormCard>
       </div>
 

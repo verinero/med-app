@@ -15,7 +15,7 @@ import { CallListItem } from "./CallListItem";
 import { eyebrow } from "../styles";
 
 export function HomeScreen({
-  savedCalls, callsToday, callsWeek, ivsTotal, medsTotal, today,
+  savedCalls, callsToday, callsWeek, ivSuccessRate, medsTotal, today,
   navTab, setNavTab,
   deleteTarget, onSetDeleteTarget, onConfirmDelete,
   onOpenCall, onExport, onNewCall, onStats, onSettings,
@@ -24,7 +24,7 @@ export function HomeScreen({
   shiftHistory, onOpenShiftManager, onCloseShiftManager, onSaveShift, onNewShiftInManager, onSelectHistoryShift,
   deleteShiftTarget, onRequestDeleteShift, onCancelDeleteShift, onConfirmDeleteShift,
 }: {
-  savedCalls: CallRecord[]; callsToday: number; callsWeek: number; ivsTotal: number; medsTotal: number; today: string;
+  savedCalls: CallRecord[]; callsToday: number; callsWeek: number; ivSuccessRate: number; medsTotal: number; today: string;
   navTab: string; setNavTab: (t: string) => void;
   deleteTarget: number | null; onSetDeleteTarget: (id: number | null) => void; onConfirmDelete: () => void;
   onOpenCall: (call: CallRecord) => void; onExport: () => void; onNewCall: () => void; onStats: () => void; onSettings: () => void;
@@ -72,7 +72,7 @@ export function HomeScreen({
         </div>
         <SLabel>Procedures</SLabel>
         <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <StatCard label="IVs Done"   value={ivsTotal}  color={HOME_COLOR.p} light={HOME_COLOR.l} />
+          <StatCard label="IV Success" value={`${ivSuccessRate}%`} color={HOME_COLOR.p} light={HOME_COLOR.l} />
           <StatCard label="Meds Given" value={medsTotal} color={HOME_COLOR.p} light={HOME_COLOR.l} />
         </div>
 

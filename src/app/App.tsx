@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
-import { db, callsToCSV, downloadCSV, medsSummary, type CallRecord, type Shift, type Hospital, type Medication } from "../db";
-import { HOME_COLOR, TH, T_CHIPS, M_CHIPS, HOSPITALS, DEFAULT_MEDS, type Screen } from "./constants";
+import { db, callsToCSV, downloadCSV, medsSummary, interventionsSummary, type CallRecord, type Shift, type Hospital, type Medication, type InterventionDef } from "../db";
+import { HOME_COLOR, TH, T_CHIPS, M_CHIPS, HOSPITALS, DEFAULT_MEDS, DEFAULT_INTERVENTIONS, type Screen } from "./constants";
 import { blankForm, callToForm, dateStr, dateStrFor, sevenDaysAgo, type CallForm } from "./callForm";
 import { blankShiftDraft, toDatetimeLocalValue, fromDatetimeLocalValue, type ShiftDraft } from "./shiftForm";
 import { callOutcomeSegments, hospitalCounts, ivSuccessStats, techedByUnitType as computeTechedByUnitType, acuitySegments } from "./callStats";
@@ -49,6 +49,8 @@ export default function App() {
   const [deleteHospitalTarget, setDeleteHospitalTarget] = useState<number | null>(null);
   const [medications, setMedications] = useState<Medication[]>([]);
   const [deleteMedicationTarget, setDeleteMedicationTarget] = useState<number | null>(null);
+  const [interventionDefs, setInterventionDefs] = useState<InterventionDef[]>([]);
+  const [deleteInterventionTarget, setDeleteInterventionTarget] = useState<number | null>(null);
 
   useEffect(() => {
     async function init() {
@@ -74,6 +76,13 @@ export default function App() {
         medicationRows = await db.medications.toArray();
       }
       setMedications(medicationRows);
+
+      let interventionRows = await db.interventions.toArray();
+      if (interventionRows.length === 0) {
+        await db.interventions.bulkAdd(DEFAULT_INTERVENTIONS.map((d, order) => ({ ...d, order })));
+        interventionRows = await db.interventions.toArray();
+      }
+      setInterventionDefs(interventionRows.sort((a, b) => a.order - b.order));
     }
     init();
   }, []);
@@ -94,7 +103,6 @@ export default function App() {
 
   const callsToday = savedCalls.filter(c => c.date === today).length;
   const callsWeek  = savedCalls.filter(c => c.timestamp >= sevenDaysAgo()).length;
-  const ivsTotal   = savedCalls.filter(c => c.ivOn).length;
   const medsTotal  = savedCalls.filter(c => c.medOn).length;
 
   const outcomeSegments  = useMemo(() => callOutcomeSegments(allCalls), [allCalls]);
@@ -195,11 +203,10 @@ export default function App() {
       sex: f.sex, complaint: f.complaint,
       hr: f.hr, bp: f.bp, spo2: f.spo2, rr: f.rr, gcs: f.gcs, glucose: f.glucose,
       alertOriented: f.alertOriented.join(","),
-      tCspine: f.tCspine, tBackboard: f.tBackboard, tSplint: f.tSplint, tBandage: f.tBandage,
+      interventions: f.interventions,
       oxyOn: f.oxyOn, oxyType: f.oxyType, oxyLiters: f.oxyLiters,
       medOn: f.medOn, salineAmt: f.salineAmt, lrAmt: f.lrAmt, meds: f.meds,
       zofran: false, toradol: false,
-      leadOn: f.leadOn, leadInterp: f.leadInterp,
       ivOn: f.ivOn, gauge: f.gauge, ivLR: f.ivLR, ivSite: f.ivSite,
       ivEstablished: f.ivEstablished, ivAttempts: f.ivAttempts,
       allergies: f.allergies, medHistory: f.medHistory, notes: f.notes,
@@ -414,6 +421,66 @@ export default function App() {
     ? `This medication is used on ${deleteMedicationUsageCount} saved call${deleteMedicationUsageCount === 1 ? "" : "s"}. Deleting it won't change those records, but it will no longer be selectable for future calls.`
     : undefined;
 
+  // ── Interventions (Settings) ───────────────────────────────
+  // Oxygen and Medication are not stored here — they're fixed, always-on
+  // rows built into the call form itself. This list is everything else,
+  // scoped per mode (trauma/medical) so each has its own set of options.
+  async function addIntervention(mode: "trauma" | "medical", name: string, notesEnabled: boolean) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (interventionDefs.some(d => d.mode === mode && d.name.toLowerCase() === trimmed.toLowerCase())) return;
+    const maxOrder = Math.max(-1, ...interventionDefs.filter(d => d.mode === mode).map(d => d.order));
+    await db.interventions.add({ name: trimmed, mode, notesEnabled, order: maxOrder + 1 });
+    setInterventionDefs((await db.interventions.toArray()).sort((a, b) => a.order - b.order));
+  }
+
+  function requestDeleteIntervention(id: number) {
+    setDeleteInterventionTarget(id);
+  }
+
+  function cancelDeleteIntervention() {
+    setDeleteInterventionTarget(null);
+  }
+
+  async function confirmDeleteIntervention() {
+    if (deleteInterventionTarget == null) return;
+    await db.interventions.delete(deleteInterventionTarget);
+    setInterventionDefs((await db.interventions.toArray()).sort((a, b) => a.order - b.order));
+    setDeleteInterventionTarget(null);
+  }
+
+  async function setInterventionNotesEnabled(id: number, notesEnabled: boolean) {
+    await db.interventions.update(id, { notesEnabled });
+    setInterventionDefs((await db.interventions.toArray()).sort((a, b) => a.order - b.order));
+  }
+
+  // Swaps `order` with the adjacent sibling in the same mode, so custom
+  // interventions can be reordered without a drag-and-drop library.
+  async function moveIntervention(id: number, direction: "up" | "down") {
+    const def = interventionDefs.find(d => d.id === id);
+    if (!def) return;
+    const siblings = interventionDefs.filter(d => d.mode === def.mode).sort((a, b) => a.order - b.order);
+    const idx = siblings.findIndex(d => d.id === id);
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= siblings.length) return;
+    const other = siblings[swapIdx];
+    await Promise.all([
+      db.interventions.update(def.id!, { order: other.order }),
+      db.interventions.update(other.id!, { order: def.order }),
+    ]);
+    setInterventionDefs((await db.interventions.toArray()).sort((a, b) => a.order - b.order));
+  }
+
+  const deleteInterventionName = deleteInterventionTarget != null
+    ? interventionDefs.find(d => d.id === deleteInterventionTarget)?.name
+    : undefined;
+  const deleteInterventionUsageCount = deleteInterventionName
+    ? allCalls.filter(c => c.interventions?.some(i => i.name === deleteInterventionName)).length
+    : 0;
+  const deleteInterventionMessage = deleteInterventionUsageCount > 0
+    ? `This intervention is used on ${deleteInterventionUsageCount} saved call${deleteInterventionUsageCount === 1 ? "" : "s"}. Deleting it won't change those records, but it will no longer be selectable for future calls.`
+    : undefined;
+
   function requestClearData() {
     setShowClearDataConfirm(true);
   }
@@ -476,6 +543,8 @@ export default function App() {
         const meds = medsSummary(call);
         if (meds) tx.push(meds);
       }
+      const ivx = interventionsSummary(call);
+      if (ivx) tx.push(ivx);
       if (tx.length) { doc.text("Tx: " + tx.join(" · "), 18, y); y += 5; }
       if (call.notes) { const lines = doc.splitTextToSize(`Notes: ${call.notes}`, 172); doc.text(lines, 18, y); y += lines.length * 4.5; }
       y += 3;
@@ -490,8 +559,6 @@ export default function App() {
     return (
       <ExportScreen
         totalCalls={savedCalls.length}
-        ivsTotal={ivsTotal}
-        medsTotal={medsTotal}
         navTab={navTab}
         setNavTab={setNavTab}
         onHome={() => setScreen("home")}
@@ -577,6 +644,15 @@ export default function App() {
         onCancelDeleteMedication={cancelDeleteMedication}
         onConfirmDeleteMedication={confirmDeleteMedication}
         onSetMedicationDefaultRoute={setMedicationDefaultRoute}
+        interventionDefs={interventionDefs}
+        onAddIntervention={addIntervention}
+        deleteInterventionTarget={deleteInterventionTarget}
+        deleteInterventionMessage={deleteInterventionMessage}
+        onRequestDeleteIntervention={requestDeleteIntervention}
+        onCancelDeleteIntervention={cancelDeleteIntervention}
+        onConfirmDeleteIntervention={confirmDeleteIntervention}
+        onSetInterventionNotesEnabled={setInterventionNotesEnabled}
+        onMoveIntervention={moveIntervention}
       />
     );
   }
@@ -590,7 +666,7 @@ export default function App() {
         savedCalls={savedCalls}
         callsToday={callsToday}
         callsWeek={callsWeek}
-        ivsTotal={ivsTotal}
+        ivSuccessRate={ivStats.rate}
         medsTotal={medsTotal}
         today={today}
         navTab={navTab}
@@ -640,6 +716,7 @@ export default function App() {
       complaintSuggestions={complaintSuggestions}
       hospitals={hospitals.map(h => h.name)}
       medications={medications}
+      interventionDefs={interventionDefs}
       shifts={shiftHistory}
       navTab={navTab}
       setNavTab={setNavTab}

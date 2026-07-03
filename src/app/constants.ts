@@ -48,3 +48,13 @@ export const DEFAULT_MEDS = [
   "Albuterol", "Atrovent", "Epinephrine", "Oral Glucose", "Acetaminophen",
   "Zofran", "Toradol", "TXA", "D10",
 ];
+// One-time seed for the interventions table — Oxygen and Medication are not
+// included here since they're always-present, non-removable rows built into
+// the call form itself, not part of the customizable list.
+export const DEFAULT_INTERVENTIONS: { name: string; mode: Mode; notesEnabled: boolean }[] = [
+  { name: "C-Spine Immobilization", mode: "trauma",  notesEnabled: false },
+  { name: "Backboard",              mode: "trauma",  notesEnabled: false },
+  { name: "Extremity Splinting",    mode: "trauma",  notesEnabled: false },
+  { name: "Bandaging",              mode: "trauma",  notesEnabled: false },
+  { name: "12-Lead ECG",            mode: "medical", notesEnabled: true },
+];
