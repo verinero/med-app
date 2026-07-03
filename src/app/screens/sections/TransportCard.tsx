@@ -1,9 +1,9 @@
-import { HOSPITALS, type ThemeColors } from "../../constants";
+import type { ThemeColors } from "../../constants";
 import type { CallForm, SetFld } from "../../callForm";
 import { FormCard } from "../../components/FormCard";
 import { CardHead } from "../../components/CardHead";
 
-export function TransportCard({ f, setFld, c }: { f: CallForm; setFld: SetFld; c: ThemeColors }) {
+export function TransportCard({ f, setFld, c, hospitals }: { f: CallForm; setFld: SetFld; c: ThemeColors; hospitals: string[] }) {
   return (
     <FormCard accent={c.p}>
       <CardHead color={c.p} label="Transport" />
@@ -40,7 +40,7 @@ export function TransportCard({ f, setFld, c }: { f: CallForm; setFld: SetFld; c
           }}
         >
           <option value="">Select hospital…</option>
-          {HOSPITALS.map(h => <option key={h} value={h}>{h}</option>)}
+          {hospitals.map(h => <option key={h} value={h}>{h}</option>)}
         </select>
       ) : f.transportMode === "refusal" ? (
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "#FFE4E6", borderRadius: 12, border: "1.5px solid #FECDD3" }}>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
-import { db, callsToCSV, downloadCSV, type CallRecord, type Shift } from "../db";
-import { HOME_COLOR, TH, T_CHIPS, M_CHIPS, type Screen } from "./constants";
+import { db, callsToCSV, downloadCSV, medsSummary, type CallRecord, type Shift, type Hospital, type Medication } from "../db";
+import { HOME_COLOR, TH, T_CHIPS, M_CHIPS, HOSPITALS, DEFAULT_MEDS, type Screen } from "./constants";
 import { blankForm, callToForm, dateStr, dateStrFor, sevenDaysAgo, type CallForm } from "./callForm";
 import { blankShiftDraft, toDatetimeLocalValue, fromDatetimeLocalValue, type ShiftDraft } from "./shiftForm";
 import { callOutcomeSegments, hospitalCounts, ivSuccessStats, techedByUnitType as computeTechedByUnitType, acuitySegments } from "./callStats";
@@ -45,6 +45,11 @@ export default function App() {
 
   const [showClearDataConfirm, setShowClearDataConfirm] = useState(false);
 
+  const [hospitals, setHospitals] = useState<Hospital[]>([]);
+  const [deleteHospitalTarget, setDeleteHospitalTarget] = useState<number | null>(null);
+  const [medications, setMedications] = useState<Medication[]>([]);
+  const [deleteMedicationTarget, setDeleteMedicationTarget] = useState<number | null>(null);
+
   useEffect(() => {
     async function init() {
       const [calls, all, allShifts] = await Promise.all([
@@ -55,6 +60,20 @@ export default function App() {
       setSavedCalls(calls);
       setAllCalls(all);
       setShifts(allShifts);
+
+      let hospitalRows = await db.hospitals.toArray();
+      if (hospitalRows.length === 0) {
+        await db.hospitals.bulkAdd(HOSPITALS.map(name => ({ name })));
+        hospitalRows = await db.hospitals.toArray();
+      }
+      setHospitals(hospitalRows);
+
+      let medicationRows = await db.medications.toArray();
+      if (medicationRows.length === 0) {
+        await db.medications.bulkAdd(DEFAULT_MEDS.map(name => ({ name })));
+        medicationRows = await db.medications.toArray();
+      }
+      setMedications(medicationRows);
     }
     init();
   }, []);
@@ -133,6 +152,11 @@ export default function App() {
     return eligible[0]?.id;
   }
 
+  function goExport() {
+    setNavTab("export");
+    setScreen("export");
+  }
+
   function startNewCall() {
     const blank = blankForm();
     blank.shiftId = defaultShiftIdForNewCall();
@@ -173,7 +197,8 @@ export default function App() {
       alertOriented: f.alertOriented.join(","),
       tCspine: f.tCspine, tBackboard: f.tBackboard, tSplint: f.tSplint, tBandage: f.tBandage,
       oxyOn: f.oxyOn, oxyType: f.oxyType, oxyLiters: f.oxyLiters,
-      medOn: f.medOn, salineAmt: f.salineAmt, lrAmt: f.lrAmt, zofran: f.zofran, toradol: f.toradol,
+      medOn: f.medOn, salineAmt: f.salineAmt, lrAmt: f.lrAmt, meds: f.meds,
+      zofran: false, toradol: false,
       leadOn: f.leadOn, leadInterp: f.leadInterp,
       ivOn: f.ivOn, gauge: f.gauge, ivLR: f.ivLR, ivSite: f.ivSite,
       ivEstablished: f.ivEstablished, ivAttempts: f.ivAttempts,
@@ -316,6 +341,79 @@ export default function App() {
     setDeleteTarget(null);
   }
 
+  // ── Hospitals (Settings) ───────────────────────────────────
+  async function addHospital(name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (hospitals.some(h => h.name.toLowerCase() === trimmed.toLowerCase())) return;
+    await db.hospitals.add({ name: trimmed });
+    setHospitals(await db.hospitals.toArray());
+  }
+
+  function requestDeleteHospital(id: number) {
+    setDeleteHospitalTarget(id);
+  }
+
+  function cancelDeleteHospital() {
+    setDeleteHospitalTarget(null);
+  }
+
+  async function confirmDeleteHospital() {
+    if (deleteHospitalTarget == null) return;
+    await db.hospitals.delete(deleteHospitalTarget);
+    setHospitals(await db.hospitals.toArray());
+    setDeleteHospitalTarget(null);
+  }
+
+  const deleteHospitalName = deleteHospitalTarget != null
+    ? hospitals.find(h => h.id === deleteHospitalTarget)?.name
+    : undefined;
+  const deleteHospitalUsageCount = deleteHospitalName
+    ? allCalls.filter(c => c.hospital === deleteHospitalName).length
+    : 0;
+  const deleteHospitalMessage = deleteHospitalUsageCount > 0
+    ? `This hospital is used on ${deleteHospitalUsageCount} saved call${deleteHospitalUsageCount === 1 ? "" : "s"}. Deleting it won't change those records, but it will no longer be selectable for future calls.`
+    : undefined;
+
+  // ── Medications (Settings) ─────────────────────────────────
+  async function addMedication(name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (medications.some(m => m.name.toLowerCase() === trimmed.toLowerCase())) return;
+    await db.medications.add({ name: trimmed });
+    setMedications(await db.medications.toArray());
+  }
+
+  function requestDeleteMedication(id: number) {
+    setDeleteMedicationTarget(id);
+  }
+
+  function cancelDeleteMedication() {
+    setDeleteMedicationTarget(null);
+  }
+
+  async function confirmDeleteMedication() {
+    if (deleteMedicationTarget == null) return;
+    await db.medications.delete(deleteMedicationTarget);
+    setMedications(await db.medications.toArray());
+    setDeleteMedicationTarget(null);
+  }
+
+  async function setMedicationDefaultRoute(id: number, defaultRoute: string) {
+    await db.medications.update(id, { defaultRoute });
+    setMedications(await db.medications.toArray());
+  }
+
+  const deleteMedicationName = deleteMedicationTarget != null
+    ? medications.find(m => m.id === deleteMedicationTarget)?.name
+    : undefined;
+  const deleteMedicationUsageCount = deleteMedicationName
+    ? allCalls.filter(c => c.meds?.some(m => m.name === deleteMedicationName)).length
+    : 0;
+  const deleteMedicationMessage = deleteMedicationUsageCount > 0
+    ? `This medication is used on ${deleteMedicationUsageCount} saved call${deleteMedicationUsageCount === 1 ? "" : "s"}. Deleting it won't change those records, but it will no longer be selectable for future calls.`
+    : undefined;
+
   function requestClearData() {
     setShowClearDataConfirm(true);
   }
@@ -375,8 +473,8 @@ export default function App() {
       if (call.medOn) {
         if (call.salineAmt) tx.push(`NS ${call.salineAmt}mL`);
         if (call.lrAmt) tx.push(`LR ${call.lrAmt}mL`);
-        if (call.zofran) tx.push("Zofran");
-        if (call.toradol) tx.push("Toradol");
+        const meds = medsSummary(call);
+        if (meds) tx.push(meds);
       }
       if (tx.length) { doc.text("Tx: " + tx.join(" · "), 18, y); y += 5; }
       if (call.notes) { const lines = doc.splitTextToSize(`Notes: ${call.notes}`, 172); doc.text(lines, 18, y); y += lines.length * 4.5; }
@@ -394,7 +492,12 @@ export default function App() {
         totalCalls={savedCalls.length}
         ivsTotal={ivsTotal}
         medsTotal={medsTotal}
-        onBack={() => { setNavTab("activity"); setScreen("home"); }}
+        navTab={navTab}
+        setNavTab={setNavTab}
+        onHome={() => setScreen("home")}
+        onNewCall={startNewCall}
+        onStats={() => setScreen("stats")}
+        onSettings={() => setScreen("settings")}
         onExportCSV={exportCSV}
         onExportPDF={exportPDF}
       />
@@ -419,7 +522,7 @@ export default function App() {
         navTab={navTab}
         setNavTab={setNavTab}
         onHome={() => setScreen("home")}
-        onExport={() => setScreen("export")}
+        onExport={goExport}
         onNewCall={startNewCall}
         onSettings={() => setScreen("settings")}
         pillUnitLabel={pillUnitLabel}
@@ -453,12 +556,27 @@ export default function App() {
         setNavTab={setNavTab}
         onHome={() => setScreen("home")}
         onStats={() => setScreen("stats")}
-        onExport={() => setScreen("export")}
+        onExport={goExport}
         onNewCall={startNewCall}
         showClearDataConfirm={showClearDataConfirm}
         onRequestClearData={requestClearData}
         onCancelClearData={cancelClearData}
         onConfirmClearData={confirmClearData}
+        hospitals={hospitals}
+        onAddHospital={addHospital}
+        deleteHospitalTarget={deleteHospitalTarget}
+        deleteHospitalMessage={deleteHospitalMessage}
+        onRequestDeleteHospital={requestDeleteHospital}
+        onCancelDeleteHospital={cancelDeleteHospital}
+        onConfirmDeleteHospital={confirmDeleteHospital}
+        medications={medications}
+        onAddMedication={addMedication}
+        deleteMedicationTarget={deleteMedicationTarget}
+        deleteMedicationMessage={deleteMedicationMessage}
+        onRequestDeleteMedication={requestDeleteMedication}
+        onCancelDeleteMedication={cancelDeleteMedication}
+        onConfirmDeleteMedication={confirmDeleteMedication}
+        onSetMedicationDefaultRoute={setMedicationDefaultRoute}
       />
     );
   }
@@ -481,7 +599,7 @@ export default function App() {
         onSetDeleteTarget={setDeleteTarget}
         onConfirmDelete={confirmDelete}
         onOpenCall={openEditCall}
-        onExport={() => setScreen("export")}
+        onExport={goExport}
         onNewCall={startNewCall}
         onStats={() => setScreen("stats")}
         onSettings={() => setScreen("settings")}
@@ -520,6 +638,8 @@ export default function App() {
       today={today}
       chips={chips}
       complaintSuggestions={complaintSuggestions}
+      hospitals={hospitals.map(h => h.name)}
+      medications={medications}
       shifts={shiftHistory}
       navTab={navTab}
       setNavTab={setNavTab}
@@ -530,7 +650,7 @@ export default function App() {
       onCancelNoShiftWarning={cancelNoShiftWarning}
       onLogAnyway={confirmSaveWithoutShift}
       onSave={() => attemptSave(isLocked)}
-      onExport={() => setScreen("export")}
+      onExport={goExport}
       onToggleLock={() => setIsLocked(prev => !prev)}
       onTryCancel={tryCancel}
       pillUnitLabel={pillUnitLabel}

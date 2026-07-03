@@ -41,3 +41,10 @@ export const OXY_T    = ["Nasal Cannula", "NRB", "BVM", "CPAP"];
 export const FLUID    = [0, 250, 500, 1000];
 export const SEX_OPTS = ["M", "F", "Other"];
 export const AO_ITEMS = ["Person", "Place", "Time", "Event"] as const;
+export const ROUTES = ["IV", "IM", "SL", "IN", "PO", "IO"];
+// One-time seed for the medications table — the live list lives in Dexie
+// and is user-editable from Settings after that.
+export const DEFAULT_MEDS = [
+  "Albuterol", "Atrovent", "Epinephrine", "Oral Glucose", "Acetaminophen",
+  "Zofran", "Toradol", "TXA", "D10",
+];

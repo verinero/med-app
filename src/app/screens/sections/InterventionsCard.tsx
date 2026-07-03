@@ -1,14 +1,15 @@
 import { Minus, Plus } from "lucide-react";
-import { OXY_T, type ThemeColors } from "../../constants";
+import type { Medication } from "../../../db";
+import { OXY_T, ROUTES, type ThemeColors } from "../../constants";
 import type { CallForm, SetFld } from "../../callForm";
 import { FormCard } from "../../components/FormCard";
 import { CardHead } from "../../components/CardHead";
 import { IntRow } from "../../components/IntRow";
 import { FluidRow } from "../../components/FluidRow";
-import { DrugBtn } from "../../components/DrugBtn";
+import { MedicationRow } from "../../components/MedicationRow";
 import { microLabel, stepperBtn } from "../../styles";
 
-export function InterventionsCard({ f, setFld, c }: { f: CallForm; setFld: SetFld; c: ThemeColors }) {
+export function InterventionsCard({ f, setFld, c, medications }: { f: CallForm; setFld: SetFld; c: ThemeColors; medications: Medication[] }) {
   return (
     <FormCard accent={c.p}>
       <CardHead color={c.p} label="Interventions" />
@@ -53,9 +54,22 @@ export function InterventionsCard({ f, setFld, c }: { f: CallForm; setFld: SetFl
           <div style={{ padding: "2px 12px 14px 46px", display: "flex", flexDirection: "column", gap: 10 }}>
             <FluidRow label="Saline" value={f.salineAmt} onChange={v => setFld("salineAmt", v)} color={c.p} light={c.l} />
             <FluidRow label="LR"     value={f.lrAmt}     onChange={v => setFld("lrAmt", v)}     color={c.p} light={c.l} />
-            <div style={{ display: "flex", gap: 8 }}>
-              <DrugBtn active={f.zofran}  onClick={() => setFld("zofran", !f.zofran)}   label="Zofran"  color={c.p} light={c.l} />
-              <DrugBtn active={f.toradol} onClick={() => setFld("toradol", !f.toradol)} label="Toradol" color={c.p} light={c.l} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {medications.map(med => {
+                const { name } = med;
+                const defaultRoute = med.defaultRoute || ROUTES[0];
+                const entry = f.meds.find(m => m.name === name);
+                const active = !!entry;
+                return (
+                  <MedicationRow key={name} name={name} active={active} route={entry?.route ?? defaultRoute}
+                    onToggle={() => {
+                      if (active) setFld("meds", f.meds.filter(m => m.name !== name));
+                      else setFld("meds", [...f.meds, { name, route: defaultRoute }]);
+                    }}
+                    onRouteChange={route => setFld("meds", f.meds.map(m => m.name === name ? { ...m, route } : m))}
+                    color={c.p} light={c.l} />
+                );
+              })}
             </div>
           </div>
         </IntRow>

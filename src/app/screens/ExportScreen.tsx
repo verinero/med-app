@@ -5,21 +5,25 @@ import { CurvedShelf } from "../components/CurvedShelf";
 import { FormCard } from "../components/FormCard";
 import { CardHead } from "../components/CardHead";
 import { StatCard } from "../components/StatCard";
+import { BottomNav } from "../components/BottomNav";
 import { primaryBtn } from "../styles";
 
-export function ExportScreen({ totalCalls, ivsTotal, medsTotal, onBack, onExportCSV, onExportPDF }: {
+export function ExportScreen({
+  totalCalls, ivsTotal, medsTotal, navTab, setNavTab, onHome, onNewCall, onStats, onSettings, onExportCSV, onExportPDF,
+}: {
   totalCalls: number; ivsTotal: number; medsTotal: number;
-  onBack: () => void; onExportCSV: () => void; onExportPDF: () => void;
+  navTab: string; setNavTab: (t: string) => void;
+  onHome: () => void; onNewCall: () => void; onStats: () => void; onSettings: () => void;
+  onExportCSV: () => void; onExportPDF: () => void;
 }) {
   return (
     <PhoneShell>
       <div style={{ background: HOME_COLOR.p, padding: "16px 20px 18px" }}>
-        <button onClick={onBack} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.8)", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0, marginBottom: 8 }}>← Back</button>
         <h1 style={{ margin: 0, color: "#fff", fontSize: 24, fontWeight: 800 }}>Export Data</h1>
         <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, marginTop: 4 }}>{totalCalls} calls stored</div>
       </div>
       <CurvedShelf bg={HOME_COLOR.p} />
-      <div style={{ flex: 1, padding: "16px", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 104px", display: "flex", flexDirection: "column", gap: 12 }}>
         <FormCard accent={HOME_COLOR.p}>
           <CardHead color={HOME_COLOR.p} label="Export Calls" />
           <p style={{ fontSize: 13, color: "#6b7280", margin: 0 }}>Download all records from your local database.</p>
@@ -39,6 +43,8 @@ export function ExportScreen({ totalCalls, ivsTotal, medsTotal, onBack, onExport
           </div>
         </FormCard>
       </div>
+
+      <BottomNav color={HOME_COLOR.p} light={HOME_COLOR.l} fabShadow={HOME_COLOR.fab} navTab={navTab} setNavTab={setNavTab} isSave={false} onFAB={onNewCall} onExport={() => {}} onActivity={onHome} onStats={onStats} onSettings={onSettings} />
     </PhoneShell>
   );
 }

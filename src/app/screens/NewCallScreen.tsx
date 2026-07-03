@@ -1,4 +1,5 @@
 import { Zap, Heart } from "lucide-react";
+import type { Medication } from "../../db";
 import type { ThemeColors } from "../constants";
 import type { CallForm, SetFld } from "../callForm";
 import type { ShiftDraft, SetShiftFld } from "../shiftForm";
@@ -23,6 +24,7 @@ import { eyebrow } from "../styles";
 
 export function NewCallScreen({
   f, setFld, c, editingCallId, isLocked, today, chips, complaintSuggestions, shifts,
+  hospitals, medications,
   navTab, setNavTab,
   showCancelWarning, onKeepEditing, onDiscard,
   showNoShiftWarning, onCancelNoShiftWarning, onLogAnyway,
@@ -34,6 +36,7 @@ export function NewCallScreen({
 }: {
   f: CallForm; setFld: SetFld; c: ThemeColors; editingCallId: number | null; isLocked: boolean;
   today: string; chips: string[]; complaintSuggestions: string[]; shifts: ShiftSummary[];
+  hospitals: string[]; medications: Medication[];
   navTab: string; setNavTab: (t: string) => void;
   showCancelWarning: boolean; onKeepEditing: () => void; onDiscard: () => void;
   showNoShiftWarning: boolean; onCancelNoShiftWarning: () => void; onLogAnyway: () => void;
@@ -143,12 +146,12 @@ export function NewCallScreen({
           <ShiftTagCard f={f} setFld={setFld} c={c} shifts={shifts} />
           <PatientBasicsCard f={f} setFld={setFld} c={c} chips={chips} complaintSuggestions={complaintSuggestions} />
           <VitalsCard f={f} setFld={setFld} c={c} />
-          <InterventionsCard f={f} setFld={setFld} c={c} />
+          <InterventionsCard f={f} setFld={setFld} c={c} medications={medications} />
           <IvAccessCard f={f} setFld={setFld} c={c} />
           <PatientHistoryCard f={f} setFld={setFld} c={c} />
           <NotesCard f={f} setFld={setFld} c={c} />
           <AcuityCard f={f} setFld={setFld} c={c} />
-          <TransportCard f={f} setFld={setFld} c={c} />
+          <TransportCard f={f} setFld={setFld} c={c} hospitals={hospitals} />
         </div>
       </div>
 
