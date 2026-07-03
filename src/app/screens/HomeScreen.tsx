@@ -17,7 +17,7 @@ export function HomeScreen({
   unitType, unitNum, showUnitModal,
   onOpenUnitModal, onCloseUnitModal, onSetUnitType, onSetUnitNum, onSaveUnitPrefs,
   deleteTarget, onSetDeleteTarget, onConfirmDelete,
-  onOpenCall, onExport, onNewCall,
+  onOpenCall, onExport, onNewCall, onStats,
 }: {
   savedCalls: CallRecord[]; callsToday: number; callsWeek: number; ivsTotal: number; medsTotal: number; today: string;
   navTab: string; setNavTab: (t: string) => void;
@@ -25,7 +25,7 @@ export function HomeScreen({
   onOpenUnitModal: () => void; onCloseUnitModal: () => void;
   onSetUnitType: (t: UType) => void; onSetUnitNum: (n: string) => void; onSaveUnitPrefs: () => void;
   deleteTarget: number | null; onSetDeleteTarget: (id: number | null) => void; onConfirmDelete: () => void;
-  onOpenCall: (call: CallRecord) => void; onExport: () => void; onNewCall: () => void;
+  onOpenCall: (call: CallRecord) => void; onExport: () => void; onNewCall: () => void; onStats: () => void;
 }) {
   return (
     <PhoneShell>
@@ -91,7 +91,7 @@ export function HomeScreen({
         )}
       </div>
 
-      <BottomNav color={HOME_COLOR.p} light={HOME_COLOR.l} fabShadow={HOME_COLOR.fab} navTab={navTab} setNavTab={setNavTab} isSave={false} onFAB={onNewCall} onExport={onExport} />
+      <BottomNav color={HOME_COLOR.p} light={HOME_COLOR.l} fabShadow={HOME_COLOR.fab} navTab={navTab} setNavTab={setNavTab} isSave={false} onFAB={onNewCall} onExport={onExport} onStats={onStats} />
     </PhoneShell>
   );
 }

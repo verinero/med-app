@@ -2,9 +2,11 @@ import { useState, useEffect, useMemo } from "react";
 import { db, getSetting, setSetting, callsToCSV, downloadCSV, type CallRecord } from "../db";
 import { HOME_COLOR, TH, T_CHIPS, M_CHIPS, type Screen, type UType } from "./constants";
 import { blankForm, callToForm, dateStr, sevenDaysAgo, type CallForm } from "./callForm";
+import { callOutcomeSegments } from "./callStats";
 import { ExportScreen } from "./screens/ExportScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { NewCallScreen } from "./screens/NewCallScreen";
+import { StatsScreen } from "./screens/StatsScreen";
 
 // ══════════════════════════════════════════════════════════════
 export default function App() {
@@ -25,14 +27,19 @@ export default function App() {
     setF(prev => ({ ...prev, [k]: v }));
 
   const [savedCalls, setSavedCalls] = useState<CallRecord[]>([]);
+  const [allCalls,   setAllCalls]   = useState<CallRecord[]>([]);
 
   useEffect(() => {
     async function init() {
       const [num, type] = await Promise.all([getSetting("unitNum", "12"), getSetting("unitType", "B")]);
       setUnitNum(num);
       setUnitType(type as UType);
-      const calls = await db.calls.orderBy("timestamp").reverse().limit(100).toArray();
+      const [calls, all] = await Promise.all([
+        db.calls.orderBy("timestamp").reverse().limit(100).toArray(),
+        db.calls.toArray(),
+      ]);
       setSavedCalls(calls);
+      setAllCalls(all);
     }
     init();
   }, []);
@@ -50,6 +57,8 @@ export default function App() {
   const callsWeek  = savedCalls.filter(c => c.timestamp >= sevenDaysAgo()).length;
   const ivsTotal   = savedCalls.filter(c => c.ivOn).length;
   const medsTotal  = savedCalls.filter(c => c.medOn).length;
+
+  const outcomeSegments = useMemo(() => callOutcomeSegments(allCalls), [allCalls]);
 
   const chips = f.mode === "trauma" ? T_CHIPS : M_CHIPS;
 
@@ -132,8 +141,12 @@ export default function App() {
     } else {
       await db.calls.add(record as CallRecord);
     }
-    const updated = await db.calls.orderBy("timestamp").reverse().limit(100).toArray();
+    const [updated, all] = await Promise.all([
+      db.calls.orderBy("timestamp").reverse().limit(100).toArray(),
+      db.calls.toArray(),
+    ]);
     setSavedCalls(updated);
+    setAllCalls(all);
     setEditingCallId(null);
     setIsLocked(false);
     setScreen("home");
@@ -142,8 +155,12 @@ export default function App() {
   async function confirmDelete() {
     if (deleteTarget == null) return;
     await db.calls.delete(deleteTarget);
-    const updated = await db.calls.orderBy("timestamp").reverse().limit(100).toArray();
+    const [updated, all] = await Promise.all([
+      db.calls.orderBy("timestamp").reverse().limit(100).toArray(),
+      db.calls.toArray(),
+    ]);
     setSavedCalls(updated);
+    setAllCalls(all);
     setDeleteTarget(null);
   }
 
@@ -210,6 +227,23 @@ export default function App() {
   }
 
   // ══════════════════════════════════════════════════════════
+  // STATS SCREEN
+  // ══════════════════════════════════════════════════════════
+  if (screen === "stats") {
+    return (
+      <StatsScreen
+        totalCalls={allCalls.length}
+        outcomeSegments={outcomeSegments}
+        navTab={navTab}
+        setNavTab={setNavTab}
+        onHome={() => setScreen("home")}
+        onExport={() => setScreen("export")}
+        onNewCall={startNewCall}
+      />
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════
   // HOME SCREEN
   // ══════════════════════════════════════════════════════════
   if (screen === "home") {
@@ -237,6 +271,7 @@ export default function App() {
         onOpenCall={openEditCall}
         onExport={() => setScreen("export")}
         onNewCall={startNewCall}
+        onStats={() => setScreen("stats")}
       />
     );
   }

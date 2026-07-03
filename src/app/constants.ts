@@ -1,5 +1,5 @@
 // ── Types ────────────────────────────────────────────────────
-export type Screen = "home" | "newCall" | "export";
+export type Screen = "home" | "newCall" | "export" | "stats";
 export type Mode   = "trauma" | "medical";
 export type UType  = "B" | "IM" | "AM";
 export type LR     = "L" | "R";
