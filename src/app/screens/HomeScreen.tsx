@@ -18,7 +18,7 @@ export function HomeScreen({
   savedCalls, callsToday, callsWeek, ivsTotal, medsTotal, today,
   navTab, setNavTab,
   deleteTarget, onSetDeleteTarget, onConfirmDelete,
-  onOpenCall, onExport, onNewCall, onStats,
+  onOpenCall, onExport, onNewCall, onStats, onSettings,
   pillUnitLabel, pillElapsedLabel,
   showShiftManager, shiftManagerTab, setShiftManagerTab, shiftDraft, setShiftFld, editingShiftId,
   shiftHistory, onOpenShiftManager, onCloseShiftManager, onSaveShift, onNewShiftInManager, onSelectHistoryShift,
@@ -27,7 +27,7 @@ export function HomeScreen({
   savedCalls: CallRecord[]; callsToday: number; callsWeek: number; ivsTotal: number; medsTotal: number; today: string;
   navTab: string; setNavTab: (t: string) => void;
   deleteTarget: number | null; onSetDeleteTarget: (id: number | null) => void; onConfirmDelete: () => void;
-  onOpenCall: (call: CallRecord) => void; onExport: () => void; onNewCall: () => void; onStats: () => void;
+  onOpenCall: (call: CallRecord) => void; onExport: () => void; onNewCall: () => void; onStats: () => void; onSettings: () => void;
   pillUnitLabel: string | null; pillElapsedLabel?: string;
   showShiftManager: boolean; shiftManagerTab: "add" | "history"; setShiftManagerTab: (t: "add" | "history") => void;
   shiftDraft: ShiftDraft; setShiftFld: SetShiftFld; editingShiftId: number | null;
@@ -102,7 +102,7 @@ export function HomeScreen({
         )}
       </div>
 
-      <BottomNav color={HOME_COLOR.p} light={HOME_COLOR.l} fabShadow={HOME_COLOR.fab} navTab={navTab} setNavTab={setNavTab} isSave={false} onFAB={onNewCall} onExport={onExport} onStats={onStats} />
+      <BottomNav color={HOME_COLOR.p} light={HOME_COLOR.l} fabShadow={HOME_COLOR.fab} navTab={navTab} setNavTab={setNavTab} isSave={false} onFAB={onNewCall} onExport={onExport} onStats={onStats} onSettings={onSettings} />
     </PhoneShell>
   );
 }

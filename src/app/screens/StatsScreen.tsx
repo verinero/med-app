@@ -20,7 +20,7 @@ import { eyebrow } from "../styles";
 
 export function StatsScreen({
   totalCalls, outcomeSegments, hospitalData, shiftHistory, shiftsByUnitType, hoursByUnitType,
-  navTab, setNavTab, onHome, onExport, onNewCall,
+  navTab, setNavTab, onHome, onExport, onNewCall, onSettings,
   pillUnitLabel, pillElapsedLabel,
   showShiftManager, shiftManagerTab, setShiftManagerTab, shiftDraft, setShiftFld, editingShiftId,
   onOpenShiftManager, onCloseShiftManager, onSaveShift, onNewShiftInManager, onSelectHistoryShift,
@@ -29,7 +29,7 @@ export function StatsScreen({
   totalCalls: number; outcomeSegments: CallOutcomeSegment[]; hospitalData: HospitalCount[]; shiftHistory: ShiftSummary[];
   shiftsByUnitType: UnitTypeSegment[]; hoursByUnitType: UnitTypeSegment[];
   navTab: string; setNavTab: (t: string) => void;
-  onHome: () => void; onExport: () => void; onNewCall: () => void;
+  onHome: () => void; onExport: () => void; onNewCall: () => void; onSettings: () => void;
   pillUnitLabel: string | null; pillElapsedLabel?: string;
   showShiftManager: boolean; shiftManagerTab: "add" | "history"; setShiftManagerTab: (t: "add" | "history") => void;
   shiftDraft: ShiftDraft; setShiftFld: SetShiftFld; editingShiftId: number | null;
@@ -93,7 +93,7 @@ export function StatsScreen({
         </FormCard>
       </div>
 
-      <BottomNav color={HOME_COLOR.p} light={HOME_COLOR.l} fabShadow={HOME_COLOR.fab} navTab={navTab} setNavTab={setNavTab} isSave={false} onFAB={onNewCall} onExport={onExport} onActivity={onHome} />
+      <BottomNav color={HOME_COLOR.p} light={HOME_COLOR.l} fabShadow={HOME_COLOR.fab} navTab={navTab} setNavTab={setNavTab} isSave={false} onFAB={onNewCall} onExport={onExport} onActivity={onHome} onSettings={onSettings} />
     </PhoneShell>
   );
 }

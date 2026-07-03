@@ -10,6 +10,7 @@ import { ExportScreen } from "./screens/ExportScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { NewCallScreen } from "./screens/NewCallScreen";
 import { StatsScreen } from "./screens/StatsScreen";
+import { SettingsScreen } from "./screens/SettingsScreen";
 
 // ══════════════════════════════════════════════════════════════
 export default function App() {
@@ -41,6 +42,8 @@ export default function App() {
   const [showNoShiftWarning, setShowNoShiftWarning] = useState(false);
   const [pendingSaveLocked,  setPendingSaveLocked]  = useState<boolean | null>(null);
   const [now, setNow] = useState(Date.now());
+
+  const [showClearDataConfirm, setShowClearDataConfirm] = useState(false);
 
   useEffect(() => {
     async function init() {
@@ -158,8 +161,8 @@ export default function App() {
     const record: Omit<CallRecord, "id"> = {
       date: taggedShift ? dateStrFor(taggedShift.startTime) : (editingCall?.date ?? today),
       timestamp: editingCall?.timestamp ?? Date.now(),
-      unitNum: taggedShift?.unitNum ?? editingCall?.unitNum ?? "",
-      unitType: taggedShift?.unitType ?? editingCall?.unitType ?? "",
+      unitNum: taggedShift?.unitNum ?? "",
+      unitType: taggedShift?.unitType ?? "",
       mode: f.mode,
       age, ageYears, ageMonths,
       sex: f.sex, complaint: f.complaint,
@@ -307,6 +310,33 @@ export default function App() {
     setDeleteTarget(null);
   }
 
+  function requestClearData() {
+    setShowClearDataConfirm(true);
+  }
+
+  function cancelClearData() {
+    setShowClearDataConfirm(false);
+  }
+
+  async function confirmClearData() {
+    await Promise.all([db.calls.clear(), db.shifts.clear(), db.settings.clear()]);
+    setSavedCalls([]);
+    setAllCalls([]);
+    setShifts([]);
+    setDeleteTarget(null);
+    setDeleteShiftTarget(null);
+    setEditingCallId(null);
+    setIsLocked(false);
+    setShowShiftManager(false);
+    setEditingShiftId(null);
+    setShiftDraftState(blankShiftDraft());
+    const blank = blankForm();
+    setF(blank);
+    setInitialForm(blank);
+    setShowClearDataConfirm(false);
+    setScreen("home");
+  }
+
   async function exportCSV() {
     const all = await db.calls.orderBy("timestamp").toArray();
     downloadCSV(callsToCSV(all), `ems-calls-${today.replace(/ /g, "-")}.csv`);
@@ -382,6 +412,7 @@ export default function App() {
         onHome={() => setScreen("home")}
         onExport={() => setScreen("export")}
         onNewCall={startNewCall}
+        onSettings={() => setScreen("settings")}
         pillUnitLabel={pillUnitLabel}
         pillElapsedLabel={pillElapsedLabel}
         showShiftManager={showShiftManager}
@@ -399,6 +430,26 @@ export default function App() {
         onRequestDeleteShift={setDeleteShiftTarget}
         onCancelDeleteShift={() => setDeleteShiftTarget(null)}
         onConfirmDeleteShift={confirmDeleteShift}
+      />
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // SETTINGS SCREEN
+  // ══════════════════════════════════════════════════════════
+  if (screen === "settings") {
+    return (
+      <SettingsScreen
+        navTab={navTab}
+        setNavTab={setNavTab}
+        onHome={() => setScreen("home")}
+        onStats={() => setScreen("stats")}
+        onExport={() => setScreen("export")}
+        onNewCall={startNewCall}
+        showClearDataConfirm={showClearDataConfirm}
+        onRequestClearData={requestClearData}
+        onCancelClearData={cancelClearData}
+        onConfirmClearData={confirmClearData}
       />
     );
   }
@@ -424,6 +475,7 @@ export default function App() {
         onExport={() => setScreen("export")}
         onNewCall={startNewCall}
         onStats={() => setScreen("stats")}
+        onSettings={() => setScreen("settings")}
         pillUnitLabel={pillUnitLabel}
         pillElapsedLabel={pillElapsedLabel}
         showShiftManager={showShiftManager}

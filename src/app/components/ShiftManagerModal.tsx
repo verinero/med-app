@@ -5,8 +5,6 @@ import { ShiftHistoryList } from "./ShiftHistoryList";
 import { DeleteModal } from "./DeleteModal";
 import { overlayStyle, sheetStyle, dragHandle, uLabelStyle, textInputStyle, primaryBtn } from "../styles";
 
-const CONTENT_HEIGHT = 420;
-
 export function ShiftManagerModal({
   show, tab, onSetTab,
   draft, setDraftFld, isEditing, onSave, onNewShift, onClose,
@@ -22,10 +20,10 @@ export function ShiftManagerModal({
   return (
     <>
       <div onClick={onClose} style={overlayStyle}>
-        <div onClick={e => e.stopPropagation()} style={sheetStyle}>
-          <div style={dragHandle} />
+        <div onClick={e => e.stopPropagation()} style={{ ...sheetStyle, maxHeight: "88vh", display: "flex", flexDirection: "column" }}>
+          <div style={{ ...dragHandle, flexShrink: 0 }} />
 
-          <div style={{ display: "flex", gap: 3, marginBottom: 20, background: "#F2F3F7", borderRadius: 11, padding: 3 }}>
+          <div style={{ display: "flex", gap: 3, marginBottom: 20, background: "#F2F3F7", borderRadius: 11, padding: 3, flexShrink: 0 }}>
             {(["add", "history"] as const).map(t => (
               <button key={t} onClick={() => onSetTab(t)} style={{
                 flex: 1, padding: "9px 0", borderRadius: 8, border: "none", cursor: "pointer",
@@ -38,12 +36,12 @@ export function ShiftManagerModal({
           </div>
 
           {tab === "add" && isEditing && (
-            <button onClick={onNewShift} style={{ background: "none", border: "none", padding: 0, marginBottom: 16, color: HOME_COLOR.p, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            <button onClick={onNewShift} style={{ background: "none", border: "none", padding: 0, marginBottom: 16, color: HOME_COLOR.p, fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
               + Log a different shift instead
             </button>
           )}
 
-          <div style={{ height: CONTENT_HEIGHT, overflowY: "auto" }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
             {tab === "add" ? (
               <>
                 <div style={uLabelStyle}>Crew (optional)</div>
@@ -97,7 +95,7 @@ export function ShiftManagerModal({
           </div>
 
           {tab === "add" && (
-            <button onClick={onSave} style={{ ...primaryBtn, background: "#16A34A", marginTop: 20 }}>{isEditing ? "Save Changes" : "Add Shift"}</button>
+            <button onClick={onSave} style={{ ...primaryBtn, background: "#16A34A", marginTop: 20, flexShrink: 0 }}>{isEditing ? "Save Changes" : "Add Shift"}</button>
           )}
         </div>
       </div>
