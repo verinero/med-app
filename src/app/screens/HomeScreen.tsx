@@ -1,44 +1,55 @@
 import { Download } from "lucide-react";
-import { HOME_COLOR, type UType } from "../constants";
+import { HOME_COLOR } from "../constants";
 import type { CallRecord } from "../../db";
+import type { ShiftDraft, SetShiftFld } from "../shiftForm";
+import type { ShiftSummary } from "../shiftStats";
 import { PhoneShell } from "../components/PhoneShell";
 import { CurvedShelf } from "../components/CurvedShelf";
 import { SLabel } from "../components/SLabel";
 import { StatCard } from "../components/StatCard";
 import { BottomNav } from "../components/BottomNav";
-import { UnitModal } from "../components/UnitModal";
 import { DeleteModal } from "../components/DeleteModal";
+import { ShiftPill } from "../components/ShiftPill";
+import { ShiftManagerModal } from "../components/ShiftManagerModal";
 import { CallListItem } from "./CallListItem";
-import { eyebrow, unitPill } from "../styles";
+import { eyebrow } from "../styles";
 
 export function HomeScreen({
   savedCalls, callsToday, callsWeek, ivsTotal, medsTotal, today,
   navTab, setNavTab,
-  unitType, unitNum, showUnitModal,
-  onOpenUnitModal, onCloseUnitModal, onSetUnitType, onSetUnitNum, onSaveUnitPrefs,
   deleteTarget, onSetDeleteTarget, onConfirmDelete,
   onOpenCall, onExport, onNewCall, onStats,
+  pillUnitLabel, pillElapsedLabel,
+  showShiftManager, shiftManagerTab, setShiftManagerTab, shiftDraft, setShiftFld, editingShiftId,
+  shiftHistory, onOpenShiftManager, onCloseShiftManager, onSaveShift, onNewShiftInManager, onSelectHistoryShift,
+  deleteShiftTarget, onRequestDeleteShift, onCancelDeleteShift, onConfirmDeleteShift,
 }: {
   savedCalls: CallRecord[]; callsToday: number; callsWeek: number; ivsTotal: number; medsTotal: number; today: string;
   navTab: string; setNavTab: (t: string) => void;
-  unitType: UType; unitNum: string; showUnitModal: boolean;
-  onOpenUnitModal: () => void; onCloseUnitModal: () => void;
-  onSetUnitType: (t: UType) => void; onSetUnitNum: (n: string) => void; onSaveUnitPrefs: () => void;
   deleteTarget: number | null; onSetDeleteTarget: (id: number | null) => void; onConfirmDelete: () => void;
   onOpenCall: (call: CallRecord) => void; onExport: () => void; onNewCall: () => void; onStats: () => void;
+  pillUnitLabel: string | null; pillElapsedLabel?: string;
+  showShiftManager: boolean; shiftManagerTab: "add" | "history"; setShiftManagerTab: (t: "add" | "history") => void;
+  shiftDraft: ShiftDraft; setShiftFld: SetShiftFld; editingShiftId: number | null;
+  shiftHistory: ShiftSummary[]; onOpenShiftManager: () => void; onCloseShiftManager: () => void;
+  onSaveShift: () => void; onNewShiftInManager: () => void; onSelectHistoryShift: (id: number) => void;
+  deleteShiftTarget: number | null; onRequestDeleteShift: (id: number) => void; onCancelDeleteShift: () => void; onConfirmDeleteShift: () => void;
 }) {
   return (
     <PhoneShell>
-      <UnitModal
-        show={showUnitModal}
-        unitType={unitType} unitNum={unitNum}
-        onSetUnitType={onSetUnitType} onSetUnitNum={onSetUnitNum}
-        onSave={onSaveUnitPrefs} onClose={onCloseUnitModal}
-      />
       <DeleteModal
         show={deleteTarget != null}
         onCancel={() => onSetDeleteTarget(null)}
         onConfirm={onConfirmDelete}
+      />
+      <ShiftManagerModal
+        show={showShiftManager}
+        tab={shiftManagerTab} onSetTab={setShiftManagerTab}
+        draft={shiftDraft} setDraftFld={setShiftFld} isEditing={editingShiftId != null}
+        onSave={onSaveShift} onNewShift={onNewShiftInManager} onClose={onCloseShiftManager}
+        history={shiftHistory} onSelectHistoryShift={onSelectHistoryShift}
+        deleteTargetId={deleteShiftTarget} onRequestDelete={onRequestDeleteShift}
+        onCancelDelete={onCancelDeleteShift} onConfirmDelete={onConfirmDeleteShift}
       />
       <div style={{ background: HOME_COLOR.p, padding: "16px 20px 18px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -47,7 +58,7 @@ export function HomeScreen({
             <h1 style={{ margin: 0, color: "#fff", fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.1 }}>Overview</h1>
             <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 500, marginTop: 5 }}>{today}</div>
           </div>
-          <button onClick={onOpenUnitModal} style={unitPill}>{unitType}-{unitNum}</button>
+          <ShiftPill unitLabel={pillUnitLabel} elapsedLabel={pillElapsedLabel} onClick={onOpenShiftManager} />
         </div>
       </div>
       <CurvedShelf bg={HOME_COLOR.p} />

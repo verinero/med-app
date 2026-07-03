@@ -1,11 +1,16 @@
 import { Zap, Heart } from "lucide-react";
-import type { UType, ThemeColors } from "../constants";
+import type { ThemeColors } from "../constants";
 import type { CallForm, SetFld } from "../callForm";
+import type { ShiftDraft, SetShiftFld } from "../shiftForm";
+import type { ShiftSummary } from "../shiftStats";
 import { PhoneShell } from "../components/PhoneShell";
 import { CurvedShelf } from "../components/CurvedShelf";
 import { BottomNav } from "../components/BottomNav";
-import { UnitModal } from "../components/UnitModal";
+import { ShiftPill } from "../components/ShiftPill";
+import { ShiftManagerModal } from "../components/ShiftManagerModal";
 import { CancelWarningModal } from "../components/CancelWarningModal";
+import { NoShiftWarningModal } from "../components/NoShiftWarningModal";
+import { ShiftTagCard } from "./sections/ShiftTagCard";
 import { PatientBasicsCard } from "./sections/PatientBasicsCard";
 import { VitalsCard } from "./sections/VitalsCard";
 import { InterventionsCard } from "./sections/InterventionsCard";
@@ -13,37 +18,53 @@ import { IvAccessCard } from "./sections/IvAccessCard";
 import { PatientHistoryCard } from "./sections/PatientHistoryCard";
 import { NotesCard } from "./sections/NotesCard";
 import { TransportCard } from "./sections/TransportCard";
-import { eyebrow, unitPill } from "../styles";
+import { eyebrow } from "../styles";
 
 export function NewCallScreen({
-  f, setFld, c, editingCallId, isLocked, today, chips, complaintSuggestions,
-  navTab, setNavTab, unitType, unitNum, showUnitModal,
-  onOpenUnitModal, onCloseUnitModal, onSetUnitType, onSetUnitNum, onSaveUnitPrefs,
+  f, setFld, c, editingCallId, isLocked, today, chips, complaintSuggestions, shifts,
+  navTab, setNavTab,
   showCancelWarning, onKeepEditing, onDiscard,
+  showNoShiftWarning, onCancelNoShiftWarning, onLogAnyway,
   onSave, onExport, onToggleLock, onTryCancel,
+  pillUnitLabel, pillElapsedLabel,
+  showShiftManager, shiftManagerTab, setShiftManagerTab, shiftDraft, setShiftFld, editingShiftId,
+  shiftHistory, onOpenShiftManager, onCloseShiftManager, onSaveShift, onNewShiftInManager, onSelectHistoryShift,
+  deleteShiftTarget, onRequestDeleteShift, onCancelDeleteShift, onConfirmDeleteShift,
 }: {
   f: CallForm; setFld: SetFld; c: ThemeColors; editingCallId: number | null; isLocked: boolean;
-  today: string; chips: string[]; complaintSuggestions: string[];
+  today: string; chips: string[]; complaintSuggestions: string[]; shifts: ShiftSummary[];
   navTab: string; setNavTab: (t: string) => void;
-  unitType: UType; unitNum: string; showUnitModal: boolean;
-  onOpenUnitModal: () => void; onCloseUnitModal: () => void;
-  onSetUnitType: (t: UType) => void; onSetUnitNum: (n: string) => void; onSaveUnitPrefs: () => void;
   showCancelWarning: boolean; onKeepEditing: () => void; onDiscard: () => void;
+  showNoShiftWarning: boolean; onCancelNoShiftWarning: () => void; onLogAnyway: () => void;
   onSave: () => void; onExport: () => void; onToggleLock: () => void; onTryCancel: () => void;
+  pillUnitLabel: string | null; pillElapsedLabel?: string;
+  showShiftManager: boolean; shiftManagerTab: "add" | "history"; setShiftManagerTab: (t: "add" | "history") => void;
+  shiftDraft: ShiftDraft; setShiftFld: SetShiftFld; editingShiftId: number | null;
+  shiftHistory: ShiftSummary[]; onOpenShiftManager: () => void; onCloseShiftManager: () => void;
+  onSaveShift: () => void; onNewShiftInManager: () => void; onSelectHistoryShift: (id: number) => void;
+  deleteShiftTarget: number | null; onRequestDeleteShift: (id: number) => void; onCancelDeleteShift: () => void; onConfirmDeleteShift: () => void;
 }) {
   return (
     <PhoneShell>
-      <UnitModal
-        show={showUnitModal}
-        unitType={unitType} unitNum={unitNum}
-        onSetUnitType={onSetUnitType} onSetUnitNum={onSetUnitNum}
-        onSave={onSaveUnitPrefs} onClose={onCloseUnitModal}
+      <ShiftManagerModal
+        show={showShiftManager}
+        tab={shiftManagerTab} onSetTab={setShiftManagerTab}
+        draft={shiftDraft} setDraftFld={setShiftFld} isEditing={editingShiftId != null}
+        onSave={onSaveShift} onNewShift={onNewShiftInManager} onClose={onCloseShiftManager}
+        history={shiftHistory} onSelectHistoryShift={onSelectHistoryShift}
+        deleteTargetId={deleteShiftTarget} onRequestDelete={onRequestDeleteShift}
+        onCancelDelete={onCancelDeleteShift} onConfirmDelete={onConfirmDeleteShift}
       />
       <CancelWarningModal
         show={showCancelWarning}
         isEditing={editingCallId != null}
         onKeepEditing={onKeepEditing}
         onDiscard={onDiscard}
+      />
+      <NoShiftWarningModal
+        show={showNoShiftWarning}
+        onCancel={onCancelNoShiftWarning}
+        onLogAnyway={onLogAnyway}
       />
 
       <div style={{ background: c.p, padding: "16px 20px 0", transition: "background 0.3s" }}>
@@ -57,7 +78,7 @@ export function NewCallScreen({
               </h1>
             </div>
           </div>
-          <button onClick={onOpenUnitModal} style={{ ...unitPill, marginLeft: 10 }}>{unitType}-{unitNum}</button>
+          <ShiftPill unitLabel={pillUnitLabel} elapsedLabel={pillElapsedLabel} onClick={onOpenShiftManager} />
         </div>
 
         <div style={{ background: "rgba(0,0,0,0.22)", borderRadius: 12, padding: 3, display: "flex", marginBottom: 12, pointerEvents: isLocked ? "none" : undefined, opacity: isLocked ? 0.6 : 1 }}>
@@ -105,6 +126,7 @@ export function NewCallScreen({
         onClick={() => { setFld("showSite", false); setFld("showComplaintSuggest", false); }}>
 
         <div style={{ padding: "0 16px", pointerEvents: isLocked ? "none" : undefined }}>
+          <ShiftTagCard f={f} setFld={setFld} c={c} shifts={shifts} />
           <PatientBasicsCard f={f} setFld={setFld} c={c} chips={chips} complaintSuggestions={complaintSuggestions} />
           <VitalsCard f={f} setFld={setFld} c={c} />
           <InterventionsCard f={f} setFld={setFld} c={c} />

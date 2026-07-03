@@ -1,8 +1,11 @@
 import type { CallRecord } from "../db";
 import type { Mode, LR, VitalLevel } from "./constants";
 
+export function dateStrFor(ts: number) {
+  return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
 export function dateStr() {
-  return new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return dateStrFor(Date.now());
 }
 export function sevenDaysAgo() { return Date.now() - 7 * 24 * 60 * 60 * 1000; }
 
@@ -25,6 +28,7 @@ export function blankForm() {
     callStatus: "" as "" | "cancelled_enroute" | "cancelled_onscene",
     hospital: "",
     transportMode: "hospital" as "hospital" | "refusal",
+    shiftId: undefined as number | undefined,
   };
 }
 
@@ -51,5 +55,6 @@ export function callToForm(call: CallRecord): CallForm {
     callStatus: (call.callStatus || "") as "" | "cancelled_enroute" | "cancelled_onscene",
     hospital: call.hospital || "",
     transportMode: (call.transportMode || "hospital") as "hospital" | "refusal",
+    shiftId: call.shiftId,
   };
 }

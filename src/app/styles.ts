@@ -10,12 +10,6 @@ export const uLabelStyle: CSSProperties = {
   letterSpacing: "0.08em", textTransform: "uppercase",
   display: "block", marginBottom: 8,
 };
-export const unitPill: CSSProperties = {
-  background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)",
-  borderRadius: 20, padding: "6px 14px", color: "#fff", fontSize: 13, fontWeight: 700,
-  cursor: "pointer", fontFamily: "'JetBrains Mono', monospace",
-  whiteSpace: "nowrap", flexShrink: 0,
-};
 export const eyebrow: CSSProperties = {
   color: "rgba(255,255,255,0.65)", fontSize: 11, fontWeight: 600,
   letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 2,
