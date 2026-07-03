@@ -122,7 +122,6 @@ export default function App() {
 
   const callsToday = savedCalls.filter(c => c.date === today).length;
   const callsWeek  = savedCalls.filter(c => c.timestamp >= sevenDaysAgo()).length;
-  const medsTotal  = savedCalls.filter(c => c.medOn).length;
 
   const outcomeSegments  = useMemo(() => callOutcomeSegments(allCalls), [allCalls]);
   const hospitalData     = useMemo(() => hospitalCounts(allCalls), [allCalls]);
@@ -725,7 +724,6 @@ export default function App() {
         callsToday={callsToday}
         callsWeek={callsWeek}
         ivSuccessRate={ivStats.rate}
-        medsTotal={medsTotal}
         today={today}
         navTab={navTab}
         setNavTab={setNavTab}
