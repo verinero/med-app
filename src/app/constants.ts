@@ -35,6 +35,9 @@ export const HOSPITALS = [
   "CHOA Arthur M. Blank", "CHOA Scottish Rite", "CHOA Hughes Spalding",
   "Southern Regional",
 ];
+// One-time seed for the chiefComplaints table — the live per-mode list lives
+// in Dexie and is user-editable from Settings after that (same pattern as
+// HOSPITALS/DEFAULT_MEDS/DEFAULT_INTERVENTIONS below).
 export const T_CHIPS  = ["MVA", "Fall", "Assault", "GSW", "Burns", "Crush"];
 export const M_CHIPS  = ["Chest Pain", "Dyspnea", "AMS", "Seizure", "Syncope", "Stroke"];
 export const OXY_T    = ["Nasal Cannula", "NRB", "BVM", "CPAP"];

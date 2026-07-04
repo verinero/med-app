@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { db, callsToCSV, downloadCSV, medsSummary, interventionsSummary, csvToCallRecords, type CallRecord, type Shift, type Hospital, type Medication, type InterventionDef } from "../db";
+import { db, callsToCSV, downloadCSV, medsSummary, interventionsSummary, csvToCallRecords, presetsToCSV, parsePresetsCSV, type CallRecord, type Shift, type Hospital, type Medication, type InterventionDef, type ChiefComplaint, type ParsedPresets } from "../db";
 import { HOME_COLOR, TH, T_CHIPS, M_CHIPS, HOSPITALS, DEFAULT_MEDS, DEFAULT_INTERVENTIONS, type Screen } from "./constants";
 import { blankForm, callToForm, dateStr, dateStrFor, sevenDaysAgo, type CallForm } from "./callForm";
 import { blankShiftDraft, toDatetimeLocalValue, fromDatetimeLocalValue, type ShiftDraft } from "./shiftForm";
@@ -11,6 +11,37 @@ import { HomeScreen } from "./screens/HomeScreen";
 import { NewCallScreen } from "./screens/NewCallScreen";
 import { StatsScreen } from "./screens/StatsScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
+
+function hospitalUsageCount(name: string, calls: CallRecord[]): number {
+  return calls.filter(c => c.hospital === name).length;
+}
+
+function medicationUsageCount(name: string, calls: CallRecord[]): number {
+  return calls.filter(c => c.meds?.some(m => m.name === name)).length;
+}
+
+function complaintUsageCount(name: string, calls: CallRecord[]): number {
+  return calls.filter(c => c.complaint === name).length;
+}
+
+interface RemovedItem { name: string; usageCount?: number }
+interface PresetsListDiff { added: string[]; removed: RemovedItem[] }
+export interface PresetsDiff {
+  hospitals: PresetsListDiff | null;
+  medications: PresetsListDiff | null;
+  interventions: { trauma: PresetsListDiff | null; medical: PresetsListDiff | null };
+  chiefComplaints: { trauma: PresetsListDiff | null; medical: PresetsListDiff | null };
+  parsed: ParsedPresets;
+}
+
+function diffByName<T extends { name: string }>(current: { name: string }[], incoming: T[] | null): PresetsListDiff | null {
+  if (incoming == null) return null;
+  const currentNames = new Set(current.map(c => c.name.toLowerCase()));
+  const incomingNames = new Set(incoming.map(i => i.name.toLowerCase()));
+  const added = incoming.filter(i => !currentNames.has(i.name.toLowerCase())).map(i => i.name);
+  const removed = current.filter(c => !incomingNames.has(c.name.toLowerCase())).map(c => ({ name: c.name }));
+  return { added, removed };
+}
 
 // ══════════════════════════════════════════════════════════════
 export default function App() {
@@ -51,11 +82,18 @@ export default function App() {
   const [deleteMedicationTarget, setDeleteMedicationTarget] = useState<number | null>(null);
   const [interventionDefs, setInterventionDefs] = useState<InterventionDef[]>([]);
   const [deleteInterventionTarget, setDeleteInterventionTarget] = useState<number | null>(null);
+  const [chiefComplaints, setChiefComplaints] = useState<ChiefComplaint[]>([]);
+  const [deleteComplaintTarget, setDeleteComplaintTarget] = useState<number | null>(null);
 
   const [importFileName, setImportFileName] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<Omit<CallRecord, "id">[] | null>(null);
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [importSuccessCount, setImportSuccessCount] = useState<number | null>(null);
+
+  const [importPresetsFileName, setImportPresetsFileName] = useState<string | null>(null);
+  const [importPresetsPreview, setImportPresetsPreview] = useState<PresetsDiff | null>(null);
+  const [importPresetsErrors, setImportPresetsErrors] = useState<string[]>([]);
+  const [importPresetsSummary, setImportPresetsSummary] = useState<string | null>(null);
 
   useEffect(() => {
     async function init() {
@@ -102,6 +140,29 @@ export default function App() {
         interventionRows = interventionRows.filter(r => r.id == null || !dupIds.includes(r.id));
       }
       setInterventionDefs(interventionRows.sort((a, b) => a.order - b.order));
+
+      let complaintRows = await db.chiefComplaints.toArray();
+      if (complaintRows.length === 0) {
+        await db.chiefComplaints.bulkAdd([
+          ...T_CHIPS.map(name => ({ name, mode: "trauma" as const })),
+          ...M_CHIPS.map(name => ({ name, mode: "medical" as const })),
+        ]);
+        complaintRows = await db.chiefComplaints.toArray();
+      }
+      // Self-heal duplicate seed rows — same StrictMode double-seed race as
+      // interventions above.
+      const seenComplaintKeys = new Set<string>();
+      const dupComplaintIds: number[] = [];
+      for (const row of [...complaintRows].sort((a, b) => (a.id ?? 0) - (b.id ?? 0))) {
+        const key = `${row.mode}::${row.name.toLowerCase()}`;
+        if (seenComplaintKeys.has(key)) { if (row.id != null) dupComplaintIds.push(row.id); }
+        else seenComplaintKeys.add(key);
+      }
+      if (dupComplaintIds.length > 0) {
+        await db.chiefComplaints.bulkDelete(dupComplaintIds);
+        complaintRows = complaintRows.filter(r => r.id == null || !dupComplaintIds.includes(r.id));
+      }
+      setChiefComplaints(complaintRows);
     }
     init();
   }, []);
@@ -143,7 +204,7 @@ export default function App() {
   const pillUnitLabel = mostRecentShift ? `${mostRecentShift.unitType}${mostRecentShift.unitNum}` : null;
   const pillElapsedLabel = openShift ? formatDuration(now - openShift.startTime) : undefined;
 
-  const chips = f.mode === "trauma" ? T_CHIPS : M_CHIPS;
+  const chips = chiefComplaints.filter(cc => cc.mode === f.mode).map(cc => cc.name);
 
   // complaint suggestions filtered by current input
   const complaintSuggestions = f.complaint.length > 0
@@ -398,6 +459,95 @@ export default function App() {
     setImportErrors([]);
   }
 
+  // ── Preset Import (Hospitals / Medications / Interventions, Settings) ──
+  // Full replace: a list/mode is only touched if the file actually contains
+  // rows for it (see parsePresetsCSV's null-means-absent contract), so a
+  // partial export (e.g. hospitals-only) can never silently wipe the rest.
+  function handleImportPresetsFileSelected(fileName: string, text: string) {
+    const parsed = parsePresetsCSV(text);
+    const hospitalsDiff = diffByName(hospitals, parsed.hospitals);
+    if (hospitalsDiff) hospitalsDiff.removed.forEach(r => { r.usageCount = hospitalUsageCount(r.name, allCalls); });
+    const medicationsDiff = diffByName(medications, parsed.medications);
+    if (medicationsDiff) medicationsDiff.removed.forEach(r => { r.usageCount = medicationUsageCount(r.name, allCalls); });
+    const traumaDiff = diffByName(interventionDefs.filter(d => d.mode === "trauma"), parsed.interventions.trauma);
+    const medicalDiff = diffByName(interventionDefs.filter(d => d.mode === "medical"), parsed.interventions.medical);
+    const complaintTraumaDiff = diffByName(chiefComplaints.filter(d => d.mode === "trauma"), parsed.chiefComplaints.trauma);
+    if (complaintTraumaDiff) complaintTraumaDiff.removed.forEach(r => { r.usageCount = complaintUsageCount(r.name, allCalls); });
+    const complaintMedicalDiff = diffByName(chiefComplaints.filter(d => d.mode === "medical"), parsed.chiefComplaints.medical);
+    if (complaintMedicalDiff) complaintMedicalDiff.removed.forEach(r => { r.usageCount = complaintUsageCount(r.name, allCalls); });
+
+    setImportPresetsFileName(fileName);
+    setImportPresetsPreview({
+      hospitals: hospitalsDiff, medications: medicationsDiff,
+      interventions: { trauma: traumaDiff, medical: medicalDiff },
+      chiefComplaints: { trauma: complaintTraumaDiff, medical: complaintMedicalDiff },
+      parsed,
+    });
+    setImportPresetsErrors(parsed.errors);
+    setImportPresetsSummary(null);
+  }
+
+  async function confirmImportPresets() {
+    if (!importPresetsPreview) return;
+    const { parsed } = importPresetsPreview;
+    const summaryParts: string[] = [];
+
+    if (parsed.hospitals) {
+      const currentIds = hospitals.map(h => h.id!).filter(id => id != null);
+      await db.hospitals.bulkDelete(currentIds);
+      await db.hospitals.bulkAdd(parsed.hospitals);
+      const d = importPresetsPreview.hospitals!;
+      summaryParts.push(`Hospitals: +${d.added.length}, -${d.removed.length}`);
+    }
+    if (parsed.medications) {
+      const currentIds = medications.map(m => m.id!).filter(id => id != null);
+      await db.medications.bulkDelete(currentIds);
+      await db.medications.bulkAdd(parsed.medications);
+      const d = importPresetsPreview.medications!;
+      summaryParts.push(`Medications: +${d.added.length}, -${d.removed.length}`);
+    }
+    for (const mode of ["trauma", "medical"] as const) {
+      const rows = parsed.interventions[mode];
+      if (!rows) continue;
+      const currentIds = interventionDefs.filter(d => d.mode === mode).map(d => d.id!).filter(id => id != null);
+      await db.interventions.bulkDelete(currentIds);
+      await db.interventions.bulkAdd(rows.map((r, order) => ({ ...r, mode, order })));
+      const d = importPresetsPreview.interventions[mode]!;
+      summaryParts.push(`${mode === "trauma" ? "Trauma" : "Medical"} interventions: +${d.added.length}, -${d.removed.length}`);
+    }
+    for (const mode of ["trauma", "medical"] as const) {
+      const rows = parsed.chiefComplaints[mode];
+      if (!rows) continue;
+      const currentIds = chiefComplaints.filter(d => d.mode === mode).map(d => d.id!).filter(id => id != null);
+      await db.chiefComplaints.bulkDelete(currentIds);
+      await db.chiefComplaints.bulkAdd(rows.map(r => ({ ...r, mode })));
+      const d = importPresetsPreview.chiefComplaints[mode]!;
+      summaryParts.push(`${mode === "trauma" ? "Trauma" : "Medical"} complaints: +${d.added.length}, -${d.removed.length}`);
+    }
+
+    const [hospitalRows, medicationRows, interventionRows, complaintRows] = await Promise.all([
+      db.hospitals.toArray(), db.medications.toArray(), db.interventions.toArray(), db.chiefComplaints.toArray(),
+    ]);
+    setHospitals(hospitalRows);
+    setMedications(medicationRows);
+    setInterventionDefs(interventionRows.sort((a, b) => a.order - b.order));
+    setChiefComplaints(complaintRows);
+
+    setImportPresetsSummary(summaryParts.length > 0 ? summaryParts.join(". ") + "." : "Nothing to import — file had no recognizable rows.");
+    setImportPresetsPreview(null);
+    setImportPresetsFileName(null);
+  }
+
+  function cancelImportPresets() {
+    setImportPresetsFileName(null);
+    setImportPresetsPreview(null);
+    setImportPresetsErrors([]);
+  }
+
+  function exportPresets() {
+    downloadCSV(presetsToCSV(hospitals, medications, interventionDefs, chiefComplaints), `ems-presets-${today.replace(/ /g, "-")}.csv`);
+  }
+
   // ── Hospitals (Settings) ───────────────────────────────────
   async function addHospital(name: string) {
     const trimmed = name.trim();
@@ -425,9 +575,7 @@ export default function App() {
   const deleteHospitalName = deleteHospitalTarget != null
     ? hospitals.find(h => h.id === deleteHospitalTarget)?.name
     : undefined;
-  const deleteHospitalUsageCount = deleteHospitalName
-    ? allCalls.filter(c => c.hospital === deleteHospitalName).length
-    : 0;
+  const deleteHospitalUsageCount = deleteHospitalName ? hospitalUsageCount(deleteHospitalName, allCalls) : 0;
   const deleteHospitalMessage = deleteHospitalUsageCount > 0
     ? `This hospital is used on ${deleteHospitalUsageCount} saved call${deleteHospitalUsageCount === 1 ? "" : "s"}. Deleting it won't change those records, but it will no longer be selectable for future calls.`
     : undefined;
@@ -464,9 +612,7 @@ export default function App() {
   const deleteMedicationName = deleteMedicationTarget != null
     ? medications.find(m => m.id === deleteMedicationTarget)?.name
     : undefined;
-  const deleteMedicationUsageCount = deleteMedicationName
-    ? allCalls.filter(c => c.meds?.some(m => m.name === deleteMedicationName)).length
-    : 0;
+  const deleteMedicationUsageCount = deleteMedicationName ? medicationUsageCount(deleteMedicationName, allCalls) : 0;
   const deleteMedicationMessage = deleteMedicationUsageCount > 0
     ? `This medication is used on ${deleteMedicationUsageCount} saved call${deleteMedicationUsageCount === 1 ? "" : "s"}. Deleting it won't change those records, but it will no longer be selectable for future calls.`
     : undefined;
@@ -531,6 +677,41 @@ export default function App() {
     ? `This intervention is used on ${deleteInterventionUsageCount} saved call${deleteInterventionUsageCount === 1 ? "" : "s"}. Deleting it won't change those records, but it will no longer be selectable for future calls.`
     : undefined;
 
+  // ── Chief Complaints (Settings) ────────────────────────────
+  // Quick-tap chips shown in New Call, scoped per mode (trauma/medical) —
+  // replaces the old hardcoded T_CHIPS/M_CHIPS constants. No reorder support
+  // (unlike Interventions): chip order is just insertion order.
+  async function addComplaint(mode: "trauma" | "medical", name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (chiefComplaints.some(c => c.mode === mode && c.name.toLowerCase() === trimmed.toLowerCase())) return;
+    await db.chiefComplaints.add({ name: trimmed, mode });
+    setChiefComplaints(await db.chiefComplaints.toArray());
+  }
+
+  function requestDeleteComplaint(id: number) {
+    setDeleteComplaintTarget(id);
+  }
+
+  function cancelDeleteComplaint() {
+    setDeleteComplaintTarget(null);
+  }
+
+  async function confirmDeleteComplaint() {
+    if (deleteComplaintTarget == null) return;
+    await db.chiefComplaints.delete(deleteComplaintTarget);
+    setChiefComplaints(await db.chiefComplaints.toArray());
+    setDeleteComplaintTarget(null);
+  }
+
+  const deleteComplaintName = deleteComplaintTarget != null
+    ? chiefComplaints.find(c => c.id === deleteComplaintTarget)?.name
+    : undefined;
+  const deleteComplaintUsageCount = deleteComplaintName ? complaintUsageCount(deleteComplaintName, allCalls) : 0;
+  const deleteComplaintMessage = deleteComplaintUsageCount > 0
+    ? `This complaint is used on ${deleteComplaintUsageCount} saved call${deleteComplaintUsageCount === 1 ? "" : "s"}. Deleting it won't change those records, but it will no longer be selectable for future calls.`
+    : undefined;
+
   function requestClearData() {
     setShowClearDataConfirm(true);
   }
@@ -540,10 +721,26 @@ export default function App() {
   }
 
   async function confirmClearData() {
-    await Promise.all([db.calls.clear(), db.shifts.clear(), db.settings.clear()]);
+    await Promise.all([
+      db.calls.clear(), db.shifts.clear(), db.settings.clear(),
+      db.hospitals.clear(), db.medications.clear(), db.interventions.clear(), db.chiefComplaints.clear(),
+    ]);
+    await Promise.all([
+      db.hospitals.bulkAdd(HOSPITALS.map(name => ({ name }))),
+      db.medications.bulkAdd(DEFAULT_MEDS.map(name => ({ name }))),
+      db.interventions.bulkAdd(DEFAULT_INTERVENTIONS.map((d, order) => ({ ...d, order }))),
+      db.chiefComplaints.bulkAdd([
+        ...T_CHIPS.map(name => ({ name, mode: "trauma" as const })),
+        ...M_CHIPS.map(name => ({ name, mode: "medical" as const })),
+      ]),
+    ]);
     setSavedCalls([]);
     setAllCalls([]);
     setShifts([]);
+    setHospitals(await db.hospitals.toArray());
+    setMedications(await db.medications.toArray());
+    setInterventionDefs(await db.interventions.toArray());
+    setChiefComplaints(await db.chiefComplaints.toArray());
     setDeleteTarget(null);
     setDeleteShiftTarget(null);
     setEditingCallId(null);
@@ -555,6 +752,7 @@ export default function App() {
     setF(blank);
     setInitialForm(blank);
     setShowClearDataConfirm(false);
+    setNavTab("activity");
     setScreen("home");
   }
 
@@ -617,6 +815,7 @@ export default function App() {
         onSettings={() => setScreen("settings")}
         onExportCSV={exportCSV}
         onExportPDF={exportPDF}
+        onExportPresets={exportPresets}
       />
     );
   }
@@ -703,6 +902,13 @@ export default function App() {
         onConfirmDeleteIntervention={confirmDeleteIntervention}
         onSetInterventionNotesEnabled={setInterventionNotesEnabled}
         onMoveIntervention={moveIntervention}
+        chiefComplaints={chiefComplaints}
+        onAddComplaint={addComplaint}
+        deleteComplaintTarget={deleteComplaintTarget}
+        deleteComplaintMessage={deleteComplaintMessage}
+        onRequestDeleteComplaint={requestDeleteComplaint}
+        onCancelDeleteComplaint={cancelDeleteComplaint}
+        onConfirmDeleteComplaint={confirmDeleteComplaint}
         importFileName={importFileName}
         importPreview={importPreview}
         importErrors={importErrors}
@@ -710,6 +916,13 @@ export default function App() {
         onImportFileSelected={handleImportFileSelected}
         onConfirmImport={confirmImport}
         onCancelImport={cancelImport}
+        importPresetsFileName={importPresetsFileName}
+        importPresetsPreview={importPresetsPreview}
+        importPresetsErrors={importPresetsErrors}
+        importPresetsSummary={importPresetsSummary}
+        onImportPresetsFileSelected={handleImportPresetsFileSelected}
+        onConfirmImportPresets={confirmImportPresets}
+        onCancelImportPresets={cancelImportPresets}
       />
     );
   }

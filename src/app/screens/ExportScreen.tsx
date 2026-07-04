@@ -8,12 +8,12 @@ import { BottomNav } from "../components/BottomNav";
 import { primaryBtn } from "../styles";
 
 export function ExportScreen({
-  totalCalls, navTab, setNavTab, onHome, onNewCall, onStats, onSettings, onExportCSV, onExportPDF,
+  totalCalls, navTab, setNavTab, onHome, onNewCall, onStats, onSettings, onExportCSV, onExportPDF, onExportPresets,
 }: {
   totalCalls: number;
   navTab: string; setNavTab: (t: string) => void;
   onHome: () => void; onNewCall: () => void; onStats: () => void; onSettings: () => void;
-  onExportCSV: () => void; onExportPDF: () => void;
+  onExportCSV: () => void; onExportPDF: () => void; onExportPresets: () => void;
 }) {
   return (
     <PhoneShell>
@@ -31,6 +31,16 @@ export function ExportScreen({
           </button>
           <button onClick={onExportPDF} style={{ ...primaryBtn, background: HOME_COLOR.p, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             <Download size={16} color="#fff" /> Export as PDF
+          </button>
+        </FormCard>
+
+        <FormCard accent={HOME_COLOR.p}>
+          <CardHead color={HOME_COLOR.p} label="Export Presets" />
+          <p style={{ fontSize: 13, color: "#6b7280", margin: 0 }}>
+            Download Hospitals, Medications, Interventions, and Chief Complaints as one CSV — for backup or loading onto another device.
+          </p>
+          <button onClick={onExportPresets} style={{ ...primaryBtn, background: "#2E7D32", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <Download size={16} color="#fff" /> Export as CSV
           </button>
         </FormCard>
       </div>

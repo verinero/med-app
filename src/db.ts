@@ -100,6 +100,15 @@ export interface InterventionDef {
   order: number;
 }
 
+// A customizable quick-tap chief complaint chip, scoped per mode — replaces
+// the old hardcoded T_CHIPS/M_CHIPS constants. No `order`/reorder support
+// (unlike InterventionDef): chip order isn't curated, just insertion order.
+export interface ChiefComplaint {
+  id?: number;
+  name: string;
+  mode: "trauma" | "medical";
+}
+
 class EMSDatabase extends Dexie {
   calls!: Table<CallRecord>;
   shifts!: Table<Shift>;
@@ -107,6 +116,7 @@ class EMSDatabase extends Dexie {
   hospitals!: Table<Hospital>;
   medications!: Table<Medication>;
   interventions!: Table<InterventionDef>;
+  chiefComplaints!: Table<ChiefComplaint>;
 
   constructor() {
     super("emsDatabase");
@@ -129,6 +139,15 @@ class EMSDatabase extends Dexie {
       hospitals: "++id, &name",
       medications: "++id, &name",
       interventions: "++id, mode, order",
+    });
+    this.version(4).stores({
+      calls: "++id, timestamp, shiftId, mode, date",
+      shifts: "++id, startTime",
+      settings: "++id, key",
+      hospitals: "++id, &name",
+      medications: "++id, &name",
+      interventions: "++id, mode, order",
+      chiefComplaints: "++id, mode",
     });
   }
 }
@@ -255,6 +274,109 @@ function parseInterventions(summary: string): { name: string; note?: string }[] 
     const match = entry.match(/^(.+?)\s\(([^)]+)\)$/);
     return match ? { name: match[1], note: match[2] } : { name: entry };
   });
+}
+
+// ── Presets export/import (Hospitals / Medications / Interventions / Chief Complaints) ─────
+// A single combined CSV, distinguished by a "Type" column, rather than
+// separate files per list — this is a bulk config load/backup for the
+// crew-editable option lists in Settings, not a per-call data format.
+export function presetsToCSV(hospitals: Hospital[], medications: Medication[], interventions: InterventionDef[], chiefComplaints: ChiefComplaint[]): string {
+  const headers = ["Type", "Name", "Mode", "DefaultRoute", "NotesEnabled", "Order"];
+  const rows: string[][] = [];
+  for (const h of hospitals) rows.push(["Hospital", h.name, "", "", "", ""]);
+  for (const m of medications) rows.push(["Medication", m.name, "", m.defaultRoute || "", "", ""]);
+  for (const i of [...interventions].sort((a, b) => a.order - b.order)) {
+    rows.push(["Intervention", i.name, i.mode, "", i.notesEnabled ? "Y" : "N", String(i.order)]);
+  }
+  for (const cc of chiefComplaints) rows.push(["Complaint", cc.name, cc.mode, "", "", ""]);
+  return [headers, ...rows].map(r => r.map(f => `"${f.replace(/"/g, '""')}"`).join(",")).join("\n");
+}
+
+export interface ParsedPresets {
+  hospitals: { name: string }[] | null;
+  medications: { name: string; defaultRoute?: string }[] | null;
+  interventions: {
+    trauma: { name: string; notesEnabled: boolean }[] | null;
+    medical: { name: string; notesEnabled: boolean }[] | null;
+  };
+  chiefComplaints: {
+    trauma: { name: string }[] | null;
+    medical: { name: string }[] | null;
+  };
+  errors: string[];
+}
+
+// Parses a CSV produced by presetsToCSV(). A list/mode with zero matching
+// rows in the file is represented as `null` ("not present, don't touch")
+// so a partial export (e.g. hospitals-only) can never silently wipe the
+// other lists on import — only lists/modes actually present get replaced.
+export function parsePresetsCSV(text: string): ParsedPresets {
+  const rows = parseCSVText(text);
+  const result: ParsedPresets = { hospitals: null, medications: null, interventions: { trauma: null, medical: null }, chiefComplaints: { trauma: null, medical: null }, errors: [] };
+  if (rows.length === 0) { result.errors.push("File is empty."); return result; }
+
+  const header = rows[0];
+  const col = (name: string) => header.indexOf(name);
+  const required = ["Type", "Name"];
+  const missing = required.filter(h => col(h) === -1);
+  if (missing.length > 0) {
+    result.errors.push(`This doesn't look like a presets export from this app (missing columns: ${missing.join(", ")}).`);
+    return result;
+  }
+  const get = (r: string[], name: string) => (col(name) === -1 ? "" : (r[col(name)] ?? ""));
+
+  const seenHospital = new Set<string>();
+  const seenMedication = new Set<string>();
+  const seenIntervention = { trauma: new Set<string>(), medical: new Set<string>() };
+  const seenComplaint = { trauma: new Set<string>(), medical: new Set<string>() };
+  const hospitals: { name: string }[] = [];
+  const medications: { name: string; defaultRoute?: string }[] = [];
+  const interventions = { trauma: [] as { name: string; notesEnabled: boolean }[], medical: [] as { name: string; notesEnabled: boolean }[] };
+  const chiefComplaints = { trauma: [] as { name: string }[], medical: [] as { name: string }[] };
+
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (r.length === 1 && r[0] === "") continue;
+    const type = get(r, "Type");
+    const name = get(r, "Name").trim();
+    if (!name) { result.errors.push(`Row ${i + 1}: missing Name, skipped.`); continue; }
+
+    if (type === "Hospital") {
+      const key = name.toLowerCase();
+      if (seenHospital.has(key)) { result.errors.push(`Row ${i + 1}: duplicate hospital "${name}", skipped.`); continue; }
+      seenHospital.add(key);
+      hospitals.push({ name });
+    } else if (type === "Medication") {
+      const key = name.toLowerCase();
+      if (seenMedication.has(key)) { result.errors.push(`Row ${i + 1}: duplicate medication "${name}", skipped.`); continue; }
+      seenMedication.add(key);
+      medications.push({ name, defaultRoute: get(r, "DefaultRoute") || undefined });
+    } else if (type === "Intervention") {
+      const mode = get(r, "Mode");
+      if (mode !== "trauma" && mode !== "medical") { result.errors.push(`Row ${i + 1}: unknown intervention mode "${mode}", skipped.`); continue; }
+      const key = name.toLowerCase();
+      if (seenIntervention[mode].has(key)) { result.errors.push(`Row ${i + 1}: duplicate ${mode} intervention "${name}", skipped.`); continue; }
+      seenIntervention[mode].add(key);
+      interventions[mode].push({ name, notesEnabled: get(r, "NotesEnabled").trim().toUpperCase() === "Y" });
+    } else if (type === "Complaint") {
+      const mode = get(r, "Mode");
+      if (mode !== "trauma" && mode !== "medical") { result.errors.push(`Row ${i + 1}: unknown complaint mode "${mode}", skipped.`); continue; }
+      const key = name.toLowerCase();
+      if (seenComplaint[mode].has(key)) { result.errors.push(`Row ${i + 1}: duplicate ${mode} complaint "${name}", skipped.`); continue; }
+      seenComplaint[mode].add(key);
+      chiefComplaints[mode].push({ name });
+    } else {
+      result.errors.push(`Row ${i + 1}: unknown Type "${type}", skipped.`);
+    }
+  }
+
+  if (hospitals.length > 0) result.hospitals = hospitals;
+  if (medications.length > 0) result.medications = medications;
+  if (interventions.trauma.length > 0) result.interventions.trauma = interventions.trauma;
+  if (interventions.medical.length > 0) result.interventions.medical = interventions.medical;
+  if (chiefComplaints.trauma.length > 0) result.chiefComplaints.trauma = chiefComplaints.trauma;
+  if (chiefComplaints.medical.length > 0) result.chiefComplaints.medical = chiefComplaints.medical;
+  return result;
 }
 
 const REQUIRED_HEADERS = ["Date", "Unit", "Type", "Mode", "Complaint"];
