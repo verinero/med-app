@@ -882,6 +882,7 @@ export default function App() {
     return (
       <ExportScreen
         totalCalls={savedCalls.length}
+        today={today}
         navTab={navTab}
         setNavTab={setNavTab}
         onHome={() => setScreen("home")}
@@ -902,6 +903,7 @@ export default function App() {
     return (
       <StatsScreen
         totalCalls={allCalls.length}
+        today={today}
         outcomeSegments={outcomeSegments}
         hospitalData={hospitalData}
         ivStats={ivStats}
@@ -945,6 +947,7 @@ export default function App() {
       <SettingsScreen
         navTab={navTab}
         setNavTab={setNavTab}
+        today={today}
         onHome={() => setScreen("home")}
         onStats={() => setScreen("stats")}
         onExport={goExport}

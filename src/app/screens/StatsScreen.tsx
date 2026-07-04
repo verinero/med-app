@@ -20,14 +20,14 @@ import { ShiftHistoryList } from "../components/ShiftHistoryList";
 import { eyebrow } from "../styles";
 
 export function StatsScreen({
-  totalCalls, outcomeSegments, hospitalData, ivStats, shiftHistory, shiftsByUnitType, hoursByUnitType, techedByUnitType, acuityData,
+  totalCalls, today, outcomeSegments, hospitalData, ivStats, shiftHistory, shiftsByUnitType, hoursByUnitType, techedByUnitType, acuityData,
   navTab, setNavTab, onHome, onExport, onNewCall, onSettings,
   pillUnitLabel, pillElapsedLabel,
   showShiftManager, shiftManagerTab, setShiftManagerTab, shiftDraft, setShiftFld, editingShiftId,
   onOpenShiftManager, onCloseShiftManager, onSaveShift, onNewShiftInManager, onSelectHistoryShift,
   deleteShiftTarget, onRequestDeleteShift, onCancelDeleteShift, onConfirmDeleteShift,
 }: {
-  totalCalls: number; outcomeSegments: CallOutcomeSegment[]; hospitalData: HospitalCount[]; ivStats: IvSuccessStats; shiftHistory: ShiftSummary[];
+  totalCalls: number; today: string; outcomeSegments: CallOutcomeSegment[]; hospitalData: HospitalCount[]; ivStats: IvSuccessStats; shiftHistory: ShiftSummary[];
   shiftsByUnitType: UnitTypeSegment[]; hoursByUnitType: UnitTypeSegment[]; techedByUnitType: TechedByUnitTypeSegment[]; acuityData: AcuitySegment[];
   navTab: string; setNavTab: (t: string) => void;
   onHome: () => void; onExport: () => void; onNewCall: () => void; onSettings: () => void;
@@ -55,6 +55,7 @@ export function StatsScreen({
           <div>
             <div style={{ ...eyebrow, color: contrastTextColor(HOME_COLOR.p), opacity: 0.65 }}>Weewoo Tracker</div>
             <h1 style={{ margin: 0, color: contrastTextColor(HOME_COLOR.p), fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.1 }}>Stats</h1>
+            <div style={{ color: contrastTextColor(HOME_COLOR.p), opacity: 0.7, fontSize: 12, fontWeight: 500, marginTop: 5 }}>{today}</div>
           </div>
           <ShiftPill unitLabel={pillUnitLabel} elapsedLabel={pillElapsedLabel} onClick={onOpenShiftManager} textColor={contrastTextColor(HOME_COLOR.p)} />
         </div>

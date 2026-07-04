@@ -547,7 +547,7 @@ function ImportPresetsCard({ fileName, preview, errors, log, onFileSelected, onC
 }
 
 export function SettingsScreen({
-  navTab, setNavTab, onHome, onStats, onExport, onNewCall,
+  navTab, setNavTab, today, onHome, onStats, onExport, onNewCall,
   showClearDataConfirm, onRequestClearData, onCancelClearData, onConfirmClearData,
   hospitals, onAddHospital, deleteHospitalTarget, deleteHospitalMessage,
   onRequestDeleteHospital, onCancelDeleteHospital, onConfirmDeleteHospital,
@@ -564,7 +564,7 @@ export function SettingsScreen({
   importPresetsFileName, importPresetsPreview, importPresetsErrors, importPresetsLog,
   onImportPresetsFileSelected, onConfirmImportPresets, onCancelImportPresets,
 }: {
-  navTab: string; setNavTab: (t: string) => void;
+  navTab: string; setNavTab: (t: string) => void; today: string;
   onHome: () => void; onStats: () => void; onExport: () => void; onNewCall: () => void;
   showClearDataConfirm: boolean; onRequestClearData: () => void; onCancelClearData: () => void; onConfirmClearData: () => void;
   hospitals: Hospital[]; onAddHospital: (name: string) => void;
@@ -630,8 +630,9 @@ export function SettingsScreen({
         onConfirm={onConfirmDeleteComplaint}
       />
       <div style={{ background: HOME_COLOR.p, padding: "16px 20px 18px" }}>
-        <div style={{ ...eyebrow, color: contrastTextColor(HOME_COLOR.p), opacity: 0.65 }}>EMS Dashboard</div>
+        <div style={{ ...eyebrow, color: contrastTextColor(HOME_COLOR.p), opacity: 0.65 }}>Weewoo Tracker</div>
         <h1 style={{ margin: 0, color: contrastTextColor(HOME_COLOR.p), fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.1 }}>Settings</h1>
+        <div style={{ color: contrastTextColor(HOME_COLOR.p), opacity: 0.7, fontSize: 12, fontWeight: 500, marginTop: 5 }}>{today}</div>
       </div>
       <CurvedShelf bg={HOME_COLOR.p} />
 
