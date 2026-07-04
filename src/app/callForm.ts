@@ -9,6 +9,15 @@ export function dateStr() {
 }
 export function sevenDaysAgo() { return Date.now() - 7 * 24 * 60 * 60 * 1000; }
 
+// Sums whichever of Eye/Verbal/Motor are set (blank counts as 0 towards the
+// running total); "" only when all three are still blank, so an
+// in-progress/untouched GCS reads as "not assessed" rather than "0".
+export function gcsTotal(eye: string, verbal: string, motor: string): string {
+  if (!eye && !verbal && !motor) return "";
+  const total = (parseInt(eye, 10) || 0) + (parseInt(verbal, 10) || 0) + (parseInt(motor, 10) || 0);
+  return String(total);
+}
+
 // ── Blank call form ───────────────────────────────────────────
 export function blankForm() {
   return {
@@ -25,6 +34,7 @@ export function blankForm() {
     hr: "" as VitalLevel, bp: "" as VitalLevel, spo2: "" as VitalLevel,
     rr: "" as VitalLevel, glucose: "" as VitalLevel,
     gcs: "",
+    gcsEye: "", gcsVerbal: "", gcsMotor: "",
     alertOriented: [] as string[],
     allergies: "", medHistory: "", notes: "",
     callStatus: "" as "" | "cancelled_enroute" | "cancelled_onscene",
@@ -56,6 +66,7 @@ export function callToForm(call: CallRecord): CallForm {
     hr: (call.hr || "") as VitalLevel, bp: (call.bp || "") as VitalLevel,
     spo2: (call.spo2 || "") as VitalLevel, rr: (call.rr || "") as VitalLevel,
     glucose: (call.glucose || "") as VitalLevel, gcs: call.gcs,
+    gcsEye: call.gcsEye || "", gcsVerbal: call.gcsVerbal || "", gcsMotor: call.gcsMotor || "",
     alertOriented: call.alertOriented ? call.alertOriented.split(",").filter(Boolean) : [],
     allergies: call.allergies, medHistory: call.medHistory, notes: call.notes,
     callStatus: (call.callStatus || "") as "" | "cancelled_enroute" | "cancelled_onscene",

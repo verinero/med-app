@@ -51,7 +51,8 @@ export function InterventionsCard({ f, setFld, c, medications, interventionDefs 
         })}
 
         <IntRow enabled={f.oxyOn} onToggle={() => { const n = !f.oxyOn; setFld("oxyOn", n); if (n) setFld("oxyOpen", true); }}
-          label="Oxygen" color={c.p} expandable expanded={f.oxyOpen} onToggleExpand={() => setFld("oxyOpen", !f.oxyOpen)}>
+          label="Oxygen" color={c.p} expandable expanded={f.oxyOpen} onToggleExpand={() => setFld("oxyOpen", !f.oxyOpen)}
+          summary={f.oxyOn ? `${f.oxyType} · ${f.oxyLiters}L` : undefined}>
           <div style={{ padding: "2px 12px 14px 46px", display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
               {OXY_T.map(t => (
@@ -77,6 +78,7 @@ export function InterventionsCard({ f, setFld, c, medications, interventionDefs 
 
         <IntRow enabled={f.medOn} onToggle={() => { const n = !f.medOn; setFld("medOn", n); if (n) setFld("medOpen", true); }}
           label="Medication" color={c.p} expandable expanded={f.medOpen} onToggleExpand={() => setFld("medOpen", !f.medOpen)}
+          summary={f.medOn && f.meds.length > 0 ? f.meds.map(m => m.name).join(", ") : undefined}
           last>
           <div style={{ padding: "2px 12px 14px 46px", display: "flex", flexDirection: "column", gap: 10 }}>
             <FluidRow label="Saline" value={f.salineAmt} onChange={v => setFld("salineAmt", v)} color={c.p} light={c.l} />

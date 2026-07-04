@@ -21,6 +21,11 @@ export interface CallRecord {
   spo2: string;
   rr: string;
   gcs: string;
+  // Eye/Verbal/Motor breakdown behind the `gcs` total — optional since
+  // pre-migration calls only ever recorded the hand-typed total.
+  gcsEye?: string;
+  gcsVerbal?: string;
+  gcsMotor?: string;
   glucose: string;
   alertOriented: string;
   // trauma interventions — legacy booleans, kept unwritten-but-readable for
@@ -154,6 +159,20 @@ class EMSDatabase extends Dexie {
 
 export const db = new EMSDatabase();
 
+// ── Settings key/value helpers ──────────────────────────────────
+// `settings` is a plain key/value table (no unique index on `key`), so a
+// "set" is a query-then-update-or-add rather than a keyed put.
+export async function getSettingValue(key: string): Promise<string | undefined> {
+  const row = await db.settings.where("key").equals(key).first();
+  return row?.value;
+}
+
+export async function setSettingValue(key: string, value: string): Promise<void> {
+  const row = await db.settings.where("key").equals(key).first();
+  if (row?.id != null) await db.settings.update(row.id, { value });
+  else await db.settings.add({ key, value });
+}
+
 // ── Export helpers ────────────────────────────────────────────
 // Calls saved before the dynamic medication list existed only recorded
 // Zofran/Toradol as booleans, with no route — those are rendered without
@@ -194,7 +213,7 @@ export function interventionsSummary(c: CallRecord): string {
 export function recordsToCSV(calls: CallRecord[], shifts: Shift[]): string {
   const headers = [
     "RecordType", "ID", "Date", "Unit", "Type", "Mode", "Age", "Sex", "Complaint",
-    "HR", "BP", "SpO2", "RR", "GCS", "Glucose",
+    "HR", "BP", "SpO2", "RR", "GCS", "GCS Eye", "GCS Verbal", "GCS Motor", "Glucose",
     "Interventions",
     "Oxygen", "O2 Type", "O2 Liters",
     "Medication", "Saline(mL)", "LR(mL)", "Medications",
@@ -204,7 +223,7 @@ export function recordsToCSV(calls: CallRecord[], shifts: Shift[]): string {
   ];
   const shiftRows = shifts.map(s => [
     "Shift", s.id ?? "", "", s.unitNum, s.unitType, "", "", "", "",
-    "", "", "", "", "", "",
+    "", "", "", "", "", "", "", "", "",
     "",
     "", "", "",
     "", "", "", "",
@@ -216,7 +235,7 @@ export function recordsToCSV(calls: CallRecord[], shifts: Shift[]): string {
     const taggedShift = c.shiftId != null ? shifts.find(s => s.id === c.shiftId) : undefined;
     return [
       "Call", c.id ?? "", `"${c.date}"`, c.unitNum, c.unitType, c.mode, c.age, c.sex, `"${c.complaint}"`,
-      c.hr, c.bp, c.spo2, c.rr, c.gcs, c.glucose,
+      c.hr, c.bp, c.spo2, c.rr, c.gcs, c.gcsEye || "", c.gcsVerbal || "", c.gcsMotor || "", c.glucose,
       `"${interventionsSummary(c)}"`,
       c.oxyOn ? "Y" : "N", c.oxyType, c.oxyLiters,
       c.medOn ? "Y" : "N", c.salineAmt, c.lrAmt, `"${medsSummary(c)}"`,
@@ -445,7 +464,9 @@ export function csvToCallRecords(text: string): { records: Omit<CallRecord, "id"
       mode, age: get(r, "Age"), ageYears, ageMonths,
       sex: get(r, "Sex"), complaint: get(r, "Complaint"),
       hr: get(r, "HR"), bp: get(r, "BP"), spo2: get(r, "SpO2"), rr: get(r, "RR"),
-      gcs: get(r, "GCS"), glucose: get(r, "Glucose"),
+      gcs: get(r, "GCS"),
+      gcsEye: get(r, "GCS Eye") || undefined, gcsVerbal: get(r, "GCS Verbal") || undefined, gcsMotor: get(r, "GCS Motor") || undefined,
+      glucose: get(r, "Glucose"),
       alertOriented: "", // not in the export, no way to recover
       interventions: parseInterventions(get(r, "Interventions")),
       oxyOn: get(r, "Oxygen") === "Y", oxyType: get(r, "O2 Type"),
@@ -533,7 +554,9 @@ export function csvToRecords(text: string): ParsedRecords {
         mode, age: get(r, "Age"), ageYears, ageMonths,
         sex: get(r, "Sex"), complaint: get(r, "Complaint"),
         hr: get(r, "HR"), bp: get(r, "BP"), spo2: get(r, "SpO2"), rr: get(r, "RR"),
-        gcs: get(r, "GCS"), glucose: get(r, "Glucose"),
+        gcs: get(r, "GCS"),
+      gcsEye: get(r, "GCS Eye") || undefined, gcsVerbal: get(r, "GCS Verbal") || undefined, gcsMotor: get(r, "GCS Motor") || undefined,
+      glucose: get(r, "Glucose"),
         alertOriented: "",
         interventions: parseInterventions(get(r, "Interventions")),
         oxyOn: get(r, "Oxygen") === "Y", oxyType: get(r, "O2 Type"),

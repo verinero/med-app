@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
-import { db, recordsToCSV, downloadCSV, medsSummary, interventionsSummary, csvToRecords, presetsToCSV, parsePresetsCSV, type CallRecord, type Shift, type Hospital, type Medication, type InterventionDef, type ChiefComplaint, type ParsedPresets } from "../db";
-import { HOME_COLOR, TH, T_CHIPS, M_CHIPS, HOSPITALS, DEFAULT_MEDS, DEFAULT_INTERVENTIONS, type Screen } from "./constants";
-import { blankForm, callToForm, dateStr, dateStrFor, sevenDaysAgo, type CallForm } from "./callForm";
+import { db, recordsToCSV, downloadCSV, medsSummary, interventionsSummary, csvToRecords, presetsToCSV, parsePresetsCSV, getSettingValue, setSettingValue, type CallRecord, type Shift, type Hospital, type Medication, type InterventionDef, type ChiefComplaint, type ParsedPresets } from "../db";
+import { HOME_COLOR, TH, T_CHIPS, M_CHIPS, HOSPITALS, DEFAULT_MEDS, DEFAULT_INTERVENTIONS, DEFAULT_THEME, HEX_COLOR_RE, deriveThemeColors, type Screen } from "./constants";
+import { blankForm, callToForm, dateStr, dateStrFor, sevenDaysAgo, gcsTotal, type CallForm } from "./callForm";
 import { blankShiftDraft, toDatetimeLocalValue, fromDatetimeLocalValue, type ShiftDraft } from "./shiftForm";
 import { callOutcomeSegments, hospitalCounts, ivSuccessStats, techedByUnitType as computeTechedByUnitType, acuitySegments } from "./callStats";
 import { shiftSummaries, shiftsByUnitType as computeShiftsByUnitType, hoursByUnitType as computeHoursByUnitType } from "./shiftStats";
@@ -95,6 +95,8 @@ export default function App() {
   const [importPresetsErrors, setImportPresetsErrors] = useState<string[]>([]);
   const [importPresetsSummary, setImportPresetsSummary] = useState<string | null>(null);
 
+  const [themeHex, setThemeHexState] = useState(DEFAULT_THEME);
+
   useEffect(() => {
     async function init() {
       const [calls, all, allShifts] = await Promise.all([
@@ -163,6 +165,19 @@ export default function App() {
         complaintRows = complaintRows.filter(r => r.id == null || !dupComplaintIds.includes(r.id));
       }
       setChiefComplaints(complaintRows);
+
+      const [homeHex, traumaHex, medicalHex] = await Promise.all([
+        getSettingValue("theme_home"), getSettingValue("theme_trauma"), getSettingValue("theme_medical"),
+      ]);
+      const loadedTheme = {
+        home: homeHex && HEX_COLOR_RE.test(homeHex) ? homeHex : DEFAULT_THEME.home,
+        trauma: traumaHex && HEX_COLOR_RE.test(traumaHex) ? traumaHex : DEFAULT_THEME.trauma,
+        medical: medicalHex && HEX_COLOR_RE.test(medicalHex) ? medicalHex : DEFAULT_THEME.medical,
+      };
+      Object.assign(HOME_COLOR, deriveThemeColors(loadedTheme.home));
+      Object.assign(TH.trauma, deriveThemeColors(loadedTheme.trauma));
+      Object.assign(TH.medical, deriveThemeColors(loadedTheme.medical));
+      setThemeHexState(loadedTheme);
     }
     init();
   }, []);
@@ -280,7 +295,10 @@ export default function App() {
       mode: f.mode,
       age, ageYears, ageMonths,
       sex: f.sex, complaint: f.complaint,
-      hr: f.hr, bp: f.bp, spo2: f.spo2, rr: f.rr, gcs: f.gcs, glucose: f.glucose,
+      hr: f.hr, bp: f.bp, spo2: f.spo2, rr: f.rr,
+      gcs: gcsTotal(f.gcsEye, f.gcsVerbal, f.gcsMotor) || (editingCall?.gcs ?? ""),
+      gcsEye: f.gcsEye || undefined, gcsVerbal: f.gcsVerbal || undefined, gcsMotor: f.gcsMotor || undefined,
+      glucose: f.glucose,
       alertOriented: f.alertOriented.join(","),
       interventions: f.interventions,
       oxyOn: f.oxyOn, oxyType: f.oxyType, oxyLiters: f.oxyLiters,
@@ -740,6 +758,33 @@ export default function App() {
     ? `This complaint is used on ${deleteComplaintUsageCount} saved call${deleteComplaintUsageCount === 1 ? "" : "s"}. Deleting it won't change those records, but it will no longer be selectable for future calls.`
     : undefined;
 
+  // ── Theme colors (Settings) ────────────────────────────────
+  // HOME_COLOR/TH are mutated in place rather than threaded through a
+  // context — every screen imports them as module-level singletons, so
+  // any state update after the mutation (setThemeHexState below) re-renders
+  // the whole tree and picks up the new values via the same object
+  // reference. Persisted individually under theme_home/theme_trauma/
+  // theme_medical keys in the existing settings key/value table.
+  async function setThemeColor(theme: "home" | "trauma" | "medical", hex: string) {
+    const derived = deriveThemeColors(hex);
+    if (theme === "home") Object.assign(HOME_COLOR, derived);
+    else Object.assign(TH[theme], derived);
+    setThemeHexState(prev => ({ ...prev, [theme]: hex }));
+    await setSettingValue(`theme_${theme}`, hex);
+  }
+
+  async function resetThemeColors() {
+    Object.assign(HOME_COLOR, deriveThemeColors(DEFAULT_THEME.home));
+    Object.assign(TH.trauma, deriveThemeColors(DEFAULT_THEME.trauma));
+    Object.assign(TH.medical, deriveThemeColors(DEFAULT_THEME.medical));
+    setThemeHexState(DEFAULT_THEME);
+    await Promise.all([
+      setSettingValue("theme_home", DEFAULT_THEME.home),
+      setSettingValue("theme_trauma", DEFAULT_THEME.trauma),
+      setSettingValue("theme_medical", DEFAULT_THEME.medical),
+    ]);
+  }
+
   function requestClearData() {
     setShowClearDataConfirm(true);
   }
@@ -904,6 +949,9 @@ export default function App() {
         onHome={() => setScreen("home")}
         onStats={() => setScreen("stats")}
         onExport={goExport}
+        themeHex={themeHex}
+        onSetThemeColor={setThemeColor}
+        onResetThemeColors={resetThemeColors}
         onNewCall={startNewCall}
         showClearDataConfirm={showClearDataConfirm}
         onRequestClearData={requestClearData}

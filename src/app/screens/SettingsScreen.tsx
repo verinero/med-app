@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Trash2, Lock, ArrowUp, ArrowDown } from "lucide-react";
-import { HOME_COLOR, ROUTES } from "../constants";
+import { ChevronDown, ChevronUp, Trash2, Lock, ArrowUp, ArrowDown, Plus } from "lucide-react";
+import { HOME_COLOR, ROUTES, COLOR_PRESETS, hsvToHex } from "../constants";
 import type { CallRecord, Hospital, Medication, InterventionDef, ChiefComplaint } from "../../db";
 import type { PresetsDiff } from "../App";
 import { PhoneShell } from "../components/PhoneShell";
@@ -77,6 +77,101 @@ function ManageListCard({ label, items, placeholder, onAdd, onRequestDelete, onS
               })}
             </div>
           )}
+        </>
+      )}
+    </FormCard>
+  );
+}
+
+// Tap-or-drag hue/saturation wheel (value fixed at 1) — the single "custom
+// color" input, as opposed to the fixed COLOR_PRESETS swatches.
+function ColorWheel({ onPick }: { onPick: (hex: string) => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  function updateFromEvent(e: React.PointerEvent) {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const maxR = rect.width / 2;
+    const dx = e.clientX - (rect.left + maxR);
+    const dy = e.clientY - (rect.top + maxR);
+    const r = Math.min(Math.sqrt(dx * dx + dy * dy), maxR);
+    let angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    if (angle < 0) angle += 360;
+    onPick(hsvToHex(angle, r / maxR, 1));
+  }
+
+  return (
+    <div
+      ref={ref}
+      onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); updateFromEvent(e); }}
+      onPointerMove={e => { if (e.buttons === 1) updateFromEvent(e); }}
+      style={{
+        width: 160, height: 160, borderRadius: "50%", margin: "4px auto 0", position: "relative",
+        background: "conic-gradient(from 90deg, red, yellow, lime, cyan, blue, magenta, red)",
+        cursor: "pointer", touchAction: "none",
+      }}
+    >
+      <div style={{
+        position: "absolute", inset: 0, borderRadius: "50%", pointerEvents: "none",
+        background: "radial-gradient(circle, #fff 0%, rgba(255,255,255,0) 70%)",
+      }} />
+    </div>
+  );
+}
+
+function ColorPickerRow({ label, value, onChange }: { label: string; value: string; onChange: (hex: string) => void }) {
+  const [wheelOpen, setWheelOpen] = useState(false);
+  const isPreset = COLOR_PRESETS.some(hex => hex.toLowerCase() === value.toLowerCase());
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <span style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: "0.04em" }}>{label}</span>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        {COLOR_PRESETS.map(hex => (
+          <button key={hex} onClick={() => { setWheelOpen(false); onChange(hex); }} style={{
+            width: 28, height: 28, borderRadius: "50%", cursor: "pointer", padding: 0,
+            background: hex,
+            border: !wheelOpen && value.toLowerCase() === hex.toLowerCase() ? "2.5px solid #0d1117" : "2px solid #fff",
+            boxShadow: "0 0 0 1px #E2E5EC",
+          }} />
+        ))}
+        {/* Single custom-color slot: "+" until a custom color is picked, then
+            shows that color; tapping it again re-opens the wheel to change it. */}
+        <button onClick={() => setWheelOpen(o => !o)} style={{
+          width: 28, height: 28, borderRadius: "50%", cursor: "pointer", padding: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: !isPreset ? value : "#fff",
+          border: !isPreset ? "2.5px solid #0d1117" : "1.5px dashed #D1D5DB",
+        }}>
+          <Plus size={14} color={!isPreset ? "#fff" : "#9ca3af"} />
+        </button>
+      </div>
+      {wheelOpen && <ColorWheel onPick={onChange} />}
+    </div>
+  );
+}
+
+function CustomizeColorsCard({ themeHex, onSetColor, onReset }: {
+  themeHex: { home: string; trauma: string; medical: string };
+  onSetColor: (theme: "home" | "trauma" | "medical", hex: string) => void;
+  onReset: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <FormCard accent={HOME_COLOR.p}>
+      <button onClick={() => setOpen(o => !o)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", padding: 0, cursor: "pointer", width: "100%" }}>
+        <CardHead color={HOME_COLOR.p} label="Customize Colors" />
+        {open ? <ChevronUp size={16} color="#9ca3af" /> : <ChevronDown size={16} color="#9ca3af" />}
+      </button>
+      {open && (
+        <>
+          <ColorPickerRow label="HOME / APP" value={themeHex.home} onChange={hex => onSetColor("home", hex)} />
+          <ColorPickerRow label="TRAUMA" value={themeHex.trauma} onChange={hex => onSetColor("trauma", hex)} />
+          <ColorPickerRow label="MEDICAL" value={themeHex.medical} onChange={hex => onSetColor("medical", hex)} />
+          <button onClick={onReset} style={{
+            padding: "10px 0", borderRadius: 11, border: "1.5px solid #E2E5EC", background: "#F8F9FC",
+            fontSize: 13, fontWeight: 700, color: "#6b7280", cursor: "pointer",
+          }}>Reset to Defaults</button>
         </>
       )}
     </FormCard>
@@ -428,6 +523,7 @@ export function SettingsScreen({
   onSetInterventionNotesEnabled, onMoveIntervention,
   chiefComplaints, onAddComplaint, deleteComplaintTarget, deleteComplaintMessage,
   onRequestDeleteComplaint, onCancelDeleteComplaint, onConfirmDeleteComplaint,
+  themeHex, onSetThemeColor, onResetThemeColors,
   importFileName, importPreview, importErrors, importSuccessCount,
   onImportFileSelected, onConfirmImport, onCancelImport,
   importPresetsFileName, importPresetsPreview, importPresetsErrors, importPresetsSummary,
@@ -450,6 +546,8 @@ export function SettingsScreen({
   chiefComplaints: ChiefComplaint[]; onAddComplaint: (mode: "trauma" | "medical", name: string) => void;
   deleteComplaintTarget: number | null; deleteComplaintMessage?: string;
   onRequestDeleteComplaint: (id: number) => void; onCancelDeleteComplaint: () => void; onConfirmDeleteComplaint: () => void;
+  themeHex: { home: string; trauma: string; medical: string };
+  onSetThemeColor: (theme: "home" | "trauma" | "medical", hex: string) => void; onResetThemeColors: () => void;
   importFileName: string | null;
   importPreview: { calls: (Omit<CallRecord, "id"> & { shiftStartKey?: string })[]; shifts: unknown[] } | null;
   importErrors: string[];
@@ -528,6 +626,9 @@ export function SettingsScreen({
           fileName={importPresetsFileName} preview={importPresetsPreview} errors={importPresetsErrors} summary={importPresetsSummary}
           onFileSelected={onImportPresetsFileSelected} onConfirm={onConfirmImportPresets} onCancel={onCancelImportPresets}
         />
+        <SLabel>Appearance</SLabel>
+        <CustomizeColorsCard themeHex={themeHex} onSetColor={onSetThemeColor} onReset={onResetThemeColors} />
+
         <FormCard accent="#D32F2F">
           <CardHead color="#D32F2F" label="Danger Zone" />
           <p style={{ fontSize: 13, color: "#6b7280", margin: 0 }}>
