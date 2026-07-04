@@ -535,20 +535,23 @@ export default function App() {
     if (!importPresetsPreview) return;
     const { parsed } = importPresetsPreview;
     const summaryParts: string[] = [];
+    const anyPresent = parsed.hospitals != null || parsed.medications != null
+      || parsed.interventions.trauma != null || parsed.interventions.medical != null
+      || parsed.chiefComplaints.trauma != null || parsed.chiefComplaints.medical != null;
 
     if (parsed.hospitals) {
       const currentIds = hospitals.map(h => h.id!).filter(id => id != null);
       await db.hospitals.bulkDelete(currentIds);
       await db.hospitals.bulkAdd(parsed.hospitals);
       const d = importPresetsPreview.hospitals!;
-      summaryParts.push(`Hospitals: +${d.added.length}, -${d.removed.length}`);
+      if (d.added.length > 0 || d.removed.length > 0) summaryParts.push(`Hospitals: +${d.added.length}, -${d.removed.length}`);
     }
     if (parsed.medications) {
       const currentIds = medications.map(m => m.id!).filter(id => id != null);
       await db.medications.bulkDelete(currentIds);
       await db.medications.bulkAdd(parsed.medications);
       const d = importPresetsPreview.medications!;
-      summaryParts.push(`Medications: +${d.added.length}, -${d.removed.length}`);
+      if (d.added.length > 0 || d.removed.length > 0) summaryParts.push(`Medications: +${d.added.length}, -${d.removed.length}`);
     }
     for (const mode of ["trauma", "medical"] as const) {
       const rows = parsed.interventions[mode];
@@ -557,7 +560,7 @@ export default function App() {
       await db.interventions.bulkDelete(currentIds);
       await db.interventions.bulkAdd(rows.map((r, order) => ({ ...r, mode, order })));
       const d = importPresetsPreview.interventions[mode]!;
-      summaryParts.push(`${mode === "trauma" ? "Trauma" : "Medical"} interventions: +${d.added.length}, -${d.removed.length}`);
+      if (d.added.length > 0 || d.removed.length > 0) summaryParts.push(`${mode === "trauma" ? "Trauma" : "Medical"} interventions: +${d.added.length}, -${d.removed.length}`);
     }
     for (const mode of ["trauma", "medical"] as const) {
       const rows = parsed.chiefComplaints[mode];
@@ -566,7 +569,7 @@ export default function App() {
       await db.chiefComplaints.bulkDelete(currentIds);
       await db.chiefComplaints.bulkAdd(rows.map(r => ({ ...r, mode })));
       const d = importPresetsPreview.chiefComplaints[mode]!;
-      summaryParts.push(`${mode === "trauma" ? "Trauma" : "Medical"} complaints: +${d.added.length}, -${d.removed.length}`);
+      if (d.added.length > 0 || d.removed.length > 0) summaryParts.push(`${mode === "trauma" ? "Trauma" : "Medical"} complaints: +${d.added.length}, -${d.removed.length}`);
     }
 
     const [hospitalRows, medicationRows, interventionRows, complaintRows] = await Promise.all([
@@ -577,7 +580,9 @@ export default function App() {
     setInterventionDefs(interventionRows.sort((a, b) => a.order - b.order));
     setChiefComplaints(complaintRows);
 
-    const summary = summaryParts.length > 0 ? summaryParts.join(". ") + "." : "Nothing to import — file had no recognizable rows.";
+    const summary = summaryParts.length > 0
+      ? summaryParts.join(". ") + "."
+      : anyPresent ? "No changes — file matched what was already configured." : "Nothing to import — file had no recognizable rows.";
     setImportPresetsLog(prev => [{ timestamp: Date.now(), summary }, ...prev]);
     setImportPresetsPreview(null);
     setImportPresetsFileName(null);

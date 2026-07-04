@@ -378,8 +378,8 @@ function ManageComplaintsCard({ items, onAdd, onRequestDelete }: {
   );
 }
 
-function formatImportTime(ts: number): string {
-  return new Date(ts).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+function formatImportDate(ts: number): string {
+  return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 interface ImportLogEntry { timestamp: number; calls: number; shifts: number; shiftsSkipped: number }
@@ -434,7 +434,7 @@ function ImportCallsCard({ fileName, preview, errors, log, onFileSelected, onCon
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           {log.map((entry, i) => (
             <div key={i} style={{ fontSize: 13, fontWeight: 700, color: "#16A34A" }}>
-              <span style={{ fontWeight: 700, color: "#9ca3af", fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>{formatImportTime(entry.timestamp)} — </span>
+              <span style={{ fontWeight: 700, color: "#9ca3af", fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>{formatImportDate(entry.timestamp)} — </span>
               Imported {entry.calls} call{entry.calls === 1 ? "" : "s"} and {entry.shifts} shift{entry.shifts === 1 ? "" : "s"}.
               {entry.shiftsSkipped > 0 ? ` (${entry.shiftsSkipped} duplicate shift${entry.shiftsSkipped === 1 ? "" : "s"} skipped.)` : ""}
             </div>
@@ -536,7 +536,7 @@ function ImportPresetsCard({ fileName, preview, errors, log, onFileSelected, onC
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           {log.map((entry, i) => (
             <div key={i} style={{ fontSize: 13, fontWeight: 700, color: "#16A34A" }}>
-              <span style={{ fontWeight: 700, color: "#9ca3af", fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>{formatImportTime(entry.timestamp)} — </span>
+              <span style={{ fontWeight: 700, color: "#9ca3af", fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>{formatImportDate(entry.timestamp)} — </span>
               {entry.summary}
             </div>
           ))}

@@ -8,7 +8,7 @@ export function BottomNav({ color, light, fabShadow, navTab, setNavTab, isSave, 
 }) {
   const lc = lockColor ?? color;
   return (
-    <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 430, height: 88, background: "#fff", borderTop: "1px solid #E2E5EC", boxShadow: "0 -6px 24px rgba(0,0,0,0.1)", display: "flex", alignItems: "center", padding: "10px 0 16px", zIndex: 100 }}>
+    <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translate3d(-50%, 0, 0)", WebkitTransform: "translate3d(-50%, 0, 0)", width: "100%", maxWidth: 430, height: 88, background: "#fff", borderTop: "1px solid #E2E5EC", boxShadow: "0 -6px 24px rgba(0,0,0,0.1)", display: "flex", alignItems: "center", padding: "10px 0 16px", zIndex: 100 }}>
 
       {/* Left quarter */}
       <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>

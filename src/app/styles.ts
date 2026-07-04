@@ -18,9 +18,16 @@ export const stepperBtn: CSSProperties = {
   width: 36, height: 36, background: "#F8F9FC", border: "none",
   cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
 };
+// `transform: translateZ(0)` forces this fixed-position overlay onto its own
+// GPU compositing layer — without it, iOS Safari can clip/mis-position
+// fixed elements during and right after a scroll-driven browser-chrome
+// (address bar) show/hide transition, so a sheet opened right after
+// scrolling can render cut off until the next reflow. Same fix applied to
+// BottomNav.tsx, which is fixed-position for the same reason.
 export const overlayStyle: CSSProperties = {
   position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.48)",
   display: "flex", alignItems: "flex-end", justifyContent: "center",
+  transform: "translateZ(0)", WebkitTransform: "translateZ(0)",
 };
 export const sheetStyle: CSSProperties = {
   width: "100%", maxWidth: 430, background: "#fff",
