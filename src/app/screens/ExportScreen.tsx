@@ -1,5 +1,5 @@
 import { Download } from "lucide-react";
-import { HOME_COLOR } from "../constants";
+import { HOME_COLOR, contrastTextColor } from "../constants";
 import { PhoneShell } from "../components/PhoneShell";
 import { CurvedShelf } from "../components/CurvedShelf";
 import { FormCard } from "../components/FormCard";
@@ -15,11 +15,12 @@ export function ExportScreen({
   onHome: () => void; onNewCall: () => void; onStats: () => void; onSettings: () => void;
   onExportCSV: () => void; onExportPDF: () => void; onExportPresets: () => void;
 }) {
+  const headerText = contrastTextColor(HOME_COLOR.p);
   return (
     <PhoneShell>
       <div style={{ background: HOME_COLOR.p, padding: "16px 20px 18px" }}>
-        <h1 style={{ margin: 0, color: "#fff", fontSize: 24, fontWeight: 800 }}>Export Data</h1>
-        <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, marginTop: 4 }}>{totalCalls} calls stored</div>
+        <h1 style={{ margin: 0, color: headerText, fontSize: 24, fontWeight: 800 }}>Export Data</h1>
+        <div style={{ color: headerText, opacity: 0.7, fontSize: 12, marginTop: 4 }}>{totalCalls} calls stored</div>
       </div>
       <CurvedShelf bg={HOME_COLOR.p} />
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 104px", display: "flex", flexDirection: "column", gap: 12 }}>
@@ -29,7 +30,7 @@ export function ExportScreen({
           <button onClick={onExportCSV} style={{ ...primaryBtn, background: "#2E7D32", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             <Download size={16} color="#fff" /> Export as CSV
           </button>
-          <button onClick={onExportPDF} style={{ ...primaryBtn, background: HOME_COLOR.p, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <button onClick={onExportPDF} style={{ ...primaryBtn, background: "#374151", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             <Download size={16} color="#fff" /> Export as PDF
           </button>
         </FormCard>

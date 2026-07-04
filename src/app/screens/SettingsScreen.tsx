@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Trash2, Lock, ArrowUp, ArrowDown, Plus } from "lucide-react";
-import { HOME_COLOR, ROUTES, COLOR_PRESETS, hsvToHex } from "../constants";
+import { HOME_COLOR, ROUTES, COLOR_PRESETS, hsvToHex, hexToHsv, contrastTextColor } from "../constants";
 import type { CallRecord, Hospital, Medication, InterventionDef, ChiefComplaint } from "../../db";
 import type { PresetsDiff } from "../App";
 import { PhoneShell } from "../components/PhoneShell";
@@ -38,7 +38,7 @@ function ManageListCard({ label, items, placeholder, onAdd, onRequestDelete, onS
               placeholder={placeholder} style={{ ...textInputStyle, flex: 1 }} />
             <button onClick={submit} style={{
               padding: "0 18px", border: "none", borderRadius: 11,
-              background: HOME_COLOR.p, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
+              background: HOME_COLOR.p, color: contrastTextColor(HOME_COLOR.p), fontSize: 14, fontWeight: 700, cursor: "pointer",
             }}>Add</button>
           </div>
           {items.length > 0 && (
@@ -84,15 +84,19 @@ function ManageListCard({ label, items, placeholder, onAdd, onRequestDelete, onS
 }
 
 // Tap-or-drag hue/saturation wheel (value fixed at 1) — the single "custom
-// color" input, as opposed to the fixed COLOR_PRESETS swatches.
-function ColorWheel({ onPick }: { onPick: (hex: string) => void }) {
+// color" input, as opposed to the fixed COLOR_PRESETS swatches. The marker
+// position is derived from `value` (via hexToHsv) rather than tracked as its
+// own state, so it always reflects the live theme color, including on the
+// initial open before any drag has happened.
+function ColorWheel({ value, onPick }: { value: string; onPick: (hex: string) => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  const SIZE = 160;
+  const maxR = SIZE / 2;
 
   function updateFromEvent(e: React.PointerEvent) {
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const maxR = rect.width / 2;
     const dx = e.clientX - (rect.left + maxR);
     const dy = e.clientY - (rect.top + maxR);
     const r = Math.min(Math.sqrt(dx * dx + dy * dy), maxR);
@@ -101,13 +105,19 @@ function ColorWheel({ onPick }: { onPick: (hex: string) => void }) {
     onPick(hsvToHex(angle, r / maxR, 1));
   }
 
+  const { h, s } = hexToHsv(value);
+  const angleRad = (h * Math.PI) / 180;
+  const markerR = s * maxR;
+  const markerX = maxR + markerR * Math.cos(angleRad);
+  const markerY = maxR + markerR * Math.sin(angleRad);
+
   return (
     <div
       ref={ref}
       onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); updateFromEvent(e); }}
       onPointerMove={e => { if (e.buttons === 1) updateFromEvent(e); }}
       style={{
-        width: 160, height: 160, borderRadius: "50%", margin: "4px auto 0", position: "relative",
+        width: SIZE, height: SIZE, borderRadius: "50%", margin: "4px auto 0", position: "relative",
         background: "conic-gradient(from 90deg, red, yellow, lime, cyan, blue, magenta, red)",
         cursor: "pointer", touchAction: "none",
       }}
@@ -115,6 +125,11 @@ function ColorWheel({ onPick }: { onPick: (hex: string) => void }) {
       <div style={{
         position: "absolute", inset: 0, borderRadius: "50%", pointerEvents: "none",
         background: "radial-gradient(circle, #fff 0%, rgba(255,255,255,0) 70%)",
+      }} />
+      <div style={{
+        position: "absolute", left: markerX, top: markerY, transform: "translate(-50%, -50%)",
+        width: 18, height: 18, borderRadius: "50%", pointerEvents: "none",
+        background: value, border: "2.5px solid #fff", boxShadow: "0 0 0 1.5px rgba(0,0,0,0.45)",
       }} />
     </div>
   );
@@ -143,10 +158,10 @@ function ColorPickerRow({ label, value, onChange }: { label: string; value: stri
           background: !isPreset ? value : "#fff",
           border: !isPreset ? "2.5px solid #0d1117" : "1.5px dashed #D1D5DB",
         }}>
-          <Plus size={14} color={!isPreset ? "#fff" : "#9ca3af"} />
+          <Plus size={14} color={!isPreset ? contrastTextColor(value) : "#9ca3af"} />
         </button>
       </div>
-      {wheelOpen && <ColorWheel onPick={onChange} />}
+      {wheelOpen && <ColorWheel value={value} onPick={onChange} />}
     </div>
   );
 }
@@ -247,7 +262,7 @@ function ManageInterventionsCard({ defs, onAdd, onRequestDelete, onSetNotesEnabl
               style={{ ...textInputStyle, flex: 1 }} />
             <button onClick={submit} style={{
               padding: "0 18px", border: "none", borderRadius: 11,
-              background: HOME_COLOR.p, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
+              background: HOME_COLOR.p, color: contrastTextColor(HOME_COLOR.p), fontSize: 14, fontWeight: 700, cursor: "pointer",
             }}>Add</button>
           </div>
           <button onClick={() => setDraftNotes(n => !n)} style={{
@@ -338,7 +353,7 @@ function ManageComplaintsCard({ items, onAdd, onRequestDelete }: {
               style={{ ...textInputStyle, flex: 1 }} />
             <button onClick={submit} style={{
               padding: "0 18px", border: "none", borderRadius: 11,
-              background: HOME_COLOR.p, color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer",
+              background: HOME_COLOR.p, color: contrastTextColor(HOME_COLOR.p), fontSize: 14, fontWeight: 700, cursor: "pointer",
             }}>Add</button>
           </div>
 
@@ -363,11 +378,17 @@ function ManageComplaintsCard({ items, onAdd, onRequestDelete }: {
   );
 }
 
-function ImportCallsCard({ fileName, preview, errors, successCount, onFileSelected, onConfirm, onCancel }: {
+function formatImportTime(ts: number): string {
+  return new Date(ts).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+interface ImportLogEntry { timestamp: number; calls: number; shifts: number; shiftsSkipped: number }
+
+function ImportCallsCard({ fileName, preview, errors, log, onFileSelected, onConfirm, onCancel }: {
   fileName: string | null;
   preview: { calls: (Omit<CallRecord, "id"> & { shiftStartKey?: string })[]; shifts: unknown[] } | null;
   errors: string[];
-  successCount: { calls: number; shifts: number; shiftsSkipped: number } | null;
+  log: ImportLogEntry[];
   onFileSelected: (name: string, text: string) => void; onConfirm: () => void; onCancel: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -387,7 +408,7 @@ function ImportCallsCard({ fileName, preview, errors, successCount, onFileSelect
         Restore calls and shifts from a CSV export. Duplicate shifts are skipped; calls are always added as new.
       </p>
       <input ref={inputRef} type="file" accept=".csv" onChange={handleChange} style={{ display: "none" }} />
-      <button onClick={() => inputRef.current?.click()} style={{ ...primaryBtn, background: HOME_COLOR.p }}>
+      <button onClick={() => inputRef.current?.click()} style={{ ...primaryBtn, background: HOME_COLOR.p, color: contrastTextColor(HOME_COLOR.p) }}>
         Choose CSV File
       </button>
 
@@ -409,10 +430,15 @@ function ImportCallsCard({ fileName, preview, errors, successCount, onFileSelect
         </div>
       )}
 
-      {successCount != null && (
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#16A34A" }}>
-          Imported {successCount.calls} call{successCount.calls === 1 ? "" : "s"} and {successCount.shifts} shift{successCount.shifts === 1 ? "" : "s"}.
-          {successCount.shiftsSkipped > 0 ? ` (${successCount.shiftsSkipped} duplicate shift${successCount.shiftsSkipped === 1 ? "" : "s"} skipped.)` : ""}
+      {log.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {log.map((entry, i) => (
+            <div key={i} style={{ fontSize: 13, fontWeight: 700, color: "#16A34A" }}>
+              <span style={{ fontWeight: 700, color: "#9ca3af", fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>{formatImportTime(entry.timestamp)} — </span>
+              Imported {entry.calls} call{entry.calls === 1 ? "" : "s"} and {entry.shifts} shift{entry.shifts === 1 ? "" : "s"}.
+              {entry.shiftsSkipped > 0 ? ` (${entry.shiftsSkipped} duplicate shift${entry.shiftsSkipped === 1 ? "" : "s"} skipped.)` : ""}
+            </div>
+          ))}
         </div>
       )}
     </FormCard>
@@ -448,8 +474,10 @@ function PresetsDiffRow({ label, diff }: { label: string; diff: { added: string[
   );
 }
 
-function ImportPresetsCard({ fileName, preview, errors, summary, onFileSelected, onConfirm, onCancel }: {
-  fileName: string | null; preview: PresetsDiff | null; errors: string[]; summary: string | null;
+interface ImportPresetsLogEntry { timestamp: number; summary: string }
+
+function ImportPresetsCard({ fileName, preview, errors, log, onFileSelected, onConfirm, onCancel }: {
+  fileName: string | null; preview: PresetsDiff | null; errors: string[]; log: ImportPresetsLogEntry[];
   onFileSelected: (name: string, text: string) => void; onConfirm: () => void; onCancel: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -479,7 +507,7 @@ function ImportPresetsCard({ fileName, preview, errors, summary, onFileSelected,
         Load a Presets CSV to replace Hospitals, Medications, Interventions, and Chief Complaints. Only lists/modes present in the file are replaced.
       </p>
       <input ref={inputRef} type="file" accept=".csv" onChange={handleChange} style={{ display: "none" }} />
-      <button onClick={() => inputRef.current?.click()} style={{ ...primaryBtn, background: HOME_COLOR.p }}>
+      <button onClick={() => inputRef.current?.click()} style={{ ...primaryBtn, background: HOME_COLOR.p, color: contrastTextColor(HOME_COLOR.p) }}>
         Choose CSV File
       </button>
 
@@ -504,8 +532,15 @@ function ImportPresetsCard({ fileName, preview, errors, summary, onFileSelected,
         <div style={{ fontSize: 13, color: "#9ca3af" }}>No Hospital/Medication/Intervention/Complaint rows found in <em>{fileName}</em>.</div>
       )}
 
-      {summary != null && (
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#16A34A" }}>{summary}</div>
+      {log.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {log.map((entry, i) => (
+            <div key={i} style={{ fontSize: 13, fontWeight: 700, color: "#16A34A" }}>
+              <span style={{ fontWeight: 700, color: "#9ca3af", fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>{formatImportTime(entry.timestamp)} — </span>
+              {entry.summary}
+            </div>
+          ))}
+        </div>
       )}
     </FormCard>
   );
@@ -524,9 +559,9 @@ export function SettingsScreen({
   chiefComplaints, onAddComplaint, deleteComplaintTarget, deleteComplaintMessage,
   onRequestDeleteComplaint, onCancelDeleteComplaint, onConfirmDeleteComplaint,
   themeHex, onSetThemeColor, onResetThemeColors,
-  importFileName, importPreview, importErrors, importSuccessCount,
+  importFileName, importPreview, importErrors, importLog,
   onImportFileSelected, onConfirmImport, onCancelImport,
-  importPresetsFileName, importPresetsPreview, importPresetsErrors, importPresetsSummary,
+  importPresetsFileName, importPresetsPreview, importPresetsErrors, importPresetsLog,
   onImportPresetsFileSelected, onConfirmImportPresets, onCancelImportPresets,
 }: {
   navTab: string; setNavTab: (t: string) => void;
@@ -551,9 +586,9 @@ export function SettingsScreen({
   importFileName: string | null;
   importPreview: { calls: (Omit<CallRecord, "id"> & { shiftStartKey?: string })[]; shifts: unknown[] } | null;
   importErrors: string[];
-  importSuccessCount: { calls: number; shifts: number; shiftsSkipped: number } | null;
+  importLog: ImportLogEntry[];
   onImportFileSelected: (name: string, text: string) => void; onConfirmImport: () => void; onCancelImport: () => void;
-  importPresetsFileName: string | null; importPresetsPreview: PresetsDiff | null; importPresetsErrors: string[]; importPresetsSummary: string | null;
+  importPresetsFileName: string | null; importPresetsPreview: PresetsDiff | null; importPresetsErrors: string[]; importPresetsLog: ImportPresetsLogEntry[];
   onImportPresetsFileSelected: (name: string, text: string) => void; onConfirmImportPresets: () => void; onCancelImportPresets: () => void;
 }) {
   return (
@@ -595,8 +630,8 @@ export function SettingsScreen({
         onConfirm={onConfirmDeleteComplaint}
       />
       <div style={{ background: HOME_COLOR.p, padding: "16px 20px 18px" }}>
-        <div style={eyebrow}>EMS Dashboard</div>
-        <h1 style={{ margin: 0, color: "#fff", fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.1 }}>Settings</h1>
+        <div style={{ ...eyebrow, color: contrastTextColor(HOME_COLOR.p), opacity: 0.65 }}>EMS Dashboard</div>
+        <h1 style={{ margin: 0, color: contrastTextColor(HOME_COLOR.p), fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.1 }}>Settings</h1>
       </div>
       <CurvedShelf bg={HOME_COLOR.p} />
 
@@ -619,11 +654,11 @@ export function SettingsScreen({
 
         <SLabel>Data</SLabel>
         <ImportCallsCard
-          fileName={importFileName} preview={importPreview} errors={importErrors} successCount={importSuccessCount}
+          fileName={importFileName} preview={importPreview} errors={importErrors} log={importLog}
           onFileSelected={onImportFileSelected} onConfirm={onConfirmImport} onCancel={onCancelImport}
         />
         <ImportPresetsCard
-          fileName={importPresetsFileName} preview={importPresetsPreview} errors={importPresetsErrors} summary={importPresetsSummary}
+          fileName={importPresetsFileName} preview={importPresetsPreview} errors={importPresetsErrors} log={importPresetsLog}
           onFileSelected={onImportPresetsFileSelected} onConfirm={onConfirmImportPresets} onCancel={onCancelImportPresets}
         />
         <SLabel>Appearance</SLabel>

@@ -1,5 +1,5 @@
 import { MapPin, ChevronDown } from "lucide-react";
-import { GAUGES, SITES, type ThemeColors, type LR } from "../../constants";
+import { GAUGES, SITES, contrastTextColor, type ThemeColors, type LR } from "../../constants";
 import type { CallForm, SetFld } from "../../callForm";
 import { FormCard } from "../../components/FormCard";
 import { CardHead } from "../../components/CardHead";
@@ -19,7 +19,7 @@ export function IvAccessCard({ f, setFld, c }: { f: CallForm; setFld: SetFld; c:
                 <button key={opt} onClick={() => setFld("ivOn", opt === "Yes")} style={{
                   padding: "8px 13px", borderRadius: 9, border: "none", cursor: "pointer",
                   fontSize: 13, fontWeight: 700, minWidth: 50, transition: "all 0.2s",
-                  background: on ? c.p : "transparent", color: on ? "#fff" : "#9ca3af",
+                  background: on ? c.p : "transparent", color: on ? contrastTextColor(c.p) : "#9ca3af",
                   boxShadow: on ? `0 2px 8px ${c.p}44` : "none",
                 }}>{opt}</button>
               );

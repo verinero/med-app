@@ -88,12 +88,12 @@ export default function App() {
   const [importFileName, setImportFileName] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<{ calls: (Omit<CallRecord, "id"> & { shiftStartKey?: string })[]; shifts: Omit<Shift, "id">[] } | null>(null);
   const [importErrors, setImportErrors] = useState<string[]>([]);
-  const [importSuccessCount, setImportSuccessCount] = useState<{ calls: number; shifts: number; shiftsSkipped: number } | null>(null);
+  const [importLog, setImportLog] = useState<{ timestamp: number; calls: number; shifts: number; shiftsSkipped: number }[]>([]);
 
   const [importPresetsFileName, setImportPresetsFileName] = useState<string | null>(null);
   const [importPresetsPreview, setImportPresetsPreview] = useState<PresetsDiff | null>(null);
   const [importPresetsErrors, setImportPresetsErrors] = useState<string[]>([]);
-  const [importPresetsSummary, setImportPresetsSummary] = useState<string | null>(null);
+  const [importPresetsLog, setImportPresetsLog] = useState<{ timestamp: number; summary: string }[]>([]);
 
   const [themeHex, setThemeHexState] = useState(DEFAULT_THEME);
 
@@ -457,7 +457,6 @@ export default function App() {
     setImportFileName(fileName);
     setImportPreview({ calls, shifts });
     setImportErrors(errors);
-    setImportSuccessCount(null);
   }
 
   function shiftKey(startTime: number, unitNum: string, unitType: string) {
@@ -494,7 +493,7 @@ export default function App() {
     setSavedCalls(updated);
     setAllCalls(all);
     setShifts(allShifts);
-    setImportSuccessCount({ calls: callsToInsert.length, shifts: newShifts.length, shiftsSkipped });
+    setImportLog(prev => [{ timestamp: Date.now(), calls: callsToInsert.length, shifts: newShifts.length, shiftsSkipped }, ...prev]);
     setImportPreview(null);
     setImportFileName(null);
   }
@@ -530,7 +529,6 @@ export default function App() {
       parsed,
     });
     setImportPresetsErrors(parsed.errors);
-    setImportPresetsSummary(null);
   }
 
   async function confirmImportPresets() {
@@ -579,7 +577,8 @@ export default function App() {
     setInterventionDefs(interventionRows.sort((a, b) => a.order - b.order));
     setChiefComplaints(complaintRows);
 
-    setImportPresetsSummary(summaryParts.length > 0 ? summaryParts.join(". ") + "." : "Nothing to import — file had no recognizable rows.");
+    const summary = summaryParts.length > 0 ? summaryParts.join(". ") + "." : "Nothing to import — file had no recognizable rows.";
+    setImportPresetsLog(prev => [{ timestamp: Date.now(), summary }, ...prev]);
     setImportPresetsPreview(null);
     setImportPresetsFileName(null);
   }
@@ -991,14 +990,14 @@ export default function App() {
         importFileName={importFileName}
         importPreview={importPreview}
         importErrors={importErrors}
-        importSuccessCount={importSuccessCount}
+        importLog={importLog}
         onImportFileSelected={handleImportFileSelected}
         onConfirmImport={confirmImport}
         onCancelImport={cancelImport}
         importPresetsFileName={importPresetsFileName}
         importPresetsPreview={importPresetsPreview}
         importPresetsErrors={importPresetsErrors}
-        importPresetsSummary={importPresetsSummary}
+        importPresetsLog={importPresetsLog}
         onImportPresetsFileSelected={handleImportPresetsFileSelected}
         onConfirmImportPresets={confirmImportPresets}
         onCancelImportPresets={cancelImportPresets}

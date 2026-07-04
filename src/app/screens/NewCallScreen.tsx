@@ -1,6 +1,7 @@
 import { Zap, Heart } from "lucide-react";
 import type { Medication, InterventionDef } from "../../db";
 import type { ThemeColors } from "../constants";
+import { contrastTextColor } from "../constants";
 import type { CallForm, SetFld } from "../callForm";
 import type { ShiftDraft, SetShiftFld } from "../shiftForm";
 import type { ShiftSummary } from "../shiftStats";
@@ -48,6 +49,7 @@ export function NewCallScreen({
   onSaveShift: () => void; onNewShiftInManager: () => void; onSelectHistoryShift: (id: number) => void;
   deleteShiftTarget: number | null; onRequestDeleteShift: (id: number) => void; onCancelDeleteShift: () => void; onConfirmDeleteShift: () => void;
 }) {
+  const headerText = contrastTextColor(c.p);
   return (
     <PhoneShell>
       <ShiftManagerModal
@@ -74,15 +76,15 @@ export function NewCallScreen({
       <div style={{ background: c.p, padding: "16px 20px 0", transition: "background 0.3s" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", paddingBottom: 12 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ ...eyebrow, marginBottom: 2 }}>{editingCallId != null ? "Editing Call" : "New Call"}</div>
+            <div style={{ ...eyebrow, color: headerText, opacity: 0.65, marginBottom: 2 }}>{editingCallId != null ? "Editing Call" : "New Call"}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-              {f.mode === "trauma" ? <Zap size={17} color="#fff" fill="#fff" /> : <Heart size={17} color="#fff" fill="#fff" />}
-              <h1 style={{ margin: 0, color: "#fff", fontSize: 22, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {f.mode === "trauma" ? <Zap size={17} color={headerText} fill={headerText} /> : <Heart size={17} color={headerText} fill={headerText} />}
+              <h1 style={{ margin: 0, color: headerText, fontSize: 22, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {f.complaint || (editingCallId != null ? "Edit Call" : "New Call")}
               </h1>
             </div>
           </div>
-          <ShiftPill unitLabel={pillUnitLabel} elapsedLabel={pillElapsedLabel} onClick={onOpenShiftManager} />
+          <ShiftPill unitLabel={pillUnitLabel} elapsedLabel={pillElapsedLabel} onClick={onOpenShiftManager} textColor={headerText} />
         </div>
 
         <div style={{ background: "rgba(0,0,0,0.22)", borderRadius: 12, padding: 3, display: "flex", marginBottom: 12, pointerEvents: isLocked ? "none" : undefined, opacity: isLocked ? 0.6 : 1 }}>
@@ -99,16 +101,22 @@ export function NewCallScreen({
 
         <div style={{ paddingBottom: 16, display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ display: "inline-block", background: "rgba(255,255,255,0.14)", border: "1px solid rgba(255,255,255,0.22)", borderRadius: 100, padding: "4px 12px", fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.92)" }}>
+            <span style={{
+              display: "inline-block", borderRadius: 100, padding: "4px 12px", fontSize: 11, fontWeight: 600,
+              background: headerText === "#000000" ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.14)",
+              border: `1px solid ${headerText === "#000000" ? "rgba(0,0,0,0.16)" : "rgba(255,255,255,0.22)"}`,
+              color: headerText, opacity: 0.92,
+            }}>
               {today}
             </span>
             <button
               onClick={() => setFld("techedCall", !f.techedCall)}
               style={{
                 padding: "4px 11px", borderRadius: 100, cursor: "pointer",
-                border: `1.5px solid ${f.techedCall ? "#fff" : "rgba(255,255,255,0.35)"}`,
-                background: f.techedCall ? "#fff" : "rgba(255,255,255,0.12)",
-                color: f.techedCall ? "#0D9488" : "rgba(255,255,255,0.75)",
+                border: `1.5px solid ${f.techedCall ? "#fff" : (headerText === "#000000" ? "rgba(0,0,0,0.25)" : "rgba(255,255,255,0.35)")}`,
+                background: f.techedCall ? "#fff" : (headerText === "#000000" ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.12)"),
+                color: f.techedCall ? "#0D9488" : headerText,
+                opacity: f.techedCall ? 1 : 0.75,
                 fontSize: 11, fontWeight: f.techedCall ? 800 : 600,
                 transition: "all 0.15s",
               }}
@@ -116,8 +124,8 @@ export function NewCallScreen({
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {([
-              { key: "cancelled_enroute",  label: "Cancelled: En Route", color: "#F59E0B" },
-              { key: "cancelled_onscene",  label: "Cancelled: On Scene", color: "#FB923C" },
+              { key: "cancelled_enroute",  label: "Cancelled: En Route" },
+              { key: "cancelled_onscene",  label: "Cancelled: On Scene" },
             ] as const).map(opt => {
               const active = f.callStatus === opt.key;
               return (
@@ -125,9 +133,10 @@ export function NewCallScreen({
                   onClick={() => setFld("callStatus", active ? "" : opt.key)}
                   style={{
                     padding: "4px 11px", borderRadius: 100, cursor: "pointer",
-                    border: `1.5px solid ${active ? "#fff" : "rgba(255,255,255,0.35)"}`,
-                    background: active ? "#fff" : "rgba(255,255,255,0.12)",
-                    color: active ? opt.color : "rgba(255,255,255,0.75)",
+                    border: `1.5px solid ${active ? "#fff" : (headerText === "#000000" ? "rgba(0,0,0,0.25)" : "rgba(255,255,255,0.35)")}`,
+                    background: active ? "#fff" : (headerText === "#000000" ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.12)"),
+                    color: active ? "#DC2626" : headerText,
+                    opacity: active ? 1 : 0.75,
                     fontSize: 11, fontWeight: active ? 800 : 600,
                     transition: "all 0.15s",
                   }}

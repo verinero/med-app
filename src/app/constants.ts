@@ -49,7 +49,42 @@ export function hsvToHex(h: number, s: number, v: number): string {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
+// Inverse of hsvToHex — used to position the color wheel's marker from the
+// currently selected hex, so the wheel reflects the live theme value rather
+// than tracking its own separate selection state.
+// YIQ perceived-brightness formula -> whichever of black/white reads better
+// on top of `hex`. Tried the stricter WCAG relative-luminance formula first
+// (threshold 0.179), but the color wheel always picks fully-saturated colors
+// (value fixed at 1), and WCAG's channel weighting rates most vivid hues
+// (red/orange/yellow/green/cyan/magenta) as "bright enough" for black text —
+// only a narrow blue/violet slice ever came out white. YIQ with the common
+// threshold of 186 (out of 255) matches the intuitive split much better:
+// only near-yellow reads as light enough for black, everything else gets
+// white — see the "get-contrast" recipe widely circulated for this exact
+// black-vs-white-text problem.
+export function contrastTextColor(hex: string): string {
+  const { r, g, b } = hexToRgb(hex);
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 186 ? "#000000" : "#ffffff";
+}
+
+export function hexToHsv(hex: string): { h: number; s: number; v: number } {
+  const { r: r255, g: g255, b: b255 } = hexToRgb(hex);
+  const r = r255 / 255, g = g255 / 255, b = b255 / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min;
+  const v = max;
+  const s = max === 0 ? 0 : delta / max;
+  let h = 0;
+  if (delta !== 0) {
+    if (max === r) h = 60 * (((g - b) / delta) % 6);
+    else if (max === g) h = 60 * ((b - r) / delta + 2);
+    else h = 60 * ((r - g) / delta + 4);
+    if (h < 0) h += 360;
+  }
+  return { h, s, v };
+}
+
+export function hexToRgb(hex: string): { r: number; g: number; b: number } {
   const clean = hex.replace("#", "");
   const full = clean.length === 3 ? clean.split("").map(c => c + c).join("") : clean;
   const num = parseInt(full, 16);

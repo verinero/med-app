@@ -1,5 +1,5 @@
 import { Download } from "lucide-react";
-import { HOME_COLOR } from "../constants";
+import { HOME_COLOR, contrastTextColor } from "../constants";
 import type { CallRecord } from "../../db";
 import type { ShiftDraft, SetShiftFld } from "../shiftForm";
 import type { ShiftSummary } from "../shiftStats";
@@ -54,11 +54,11 @@ export function HomeScreen({
       <div style={{ background: HOME_COLOR.p, padding: "16px 20px 18px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <div style={eyebrow}>EMS Dashboard</div>
-            <h1 style={{ margin: 0, color: "#fff", fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.1 }}>Overview</h1>
-            <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 500, marginTop: 5 }}>{today}</div>
+            <div style={{ ...eyebrow, color: contrastTextColor(HOME_COLOR.p), opacity: 0.65 }}>Weewoo Tracker</div>
+            <h1 style={{ margin: 0, color: contrastTextColor(HOME_COLOR.p), fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.1 }}>Overview</h1>
+            <div style={{ color: contrastTextColor(HOME_COLOR.p), opacity: 0.7, fontSize: 12, fontWeight: 500, marginTop: 5 }}>{today}</div>
           </div>
-          <ShiftPill unitLabel={pillUnitLabel} elapsedLabel={pillElapsedLabel} onClick={onOpenShiftManager} />
+          <ShiftPill unitLabel={pillUnitLabel} elapsedLabel={pillElapsedLabel} onClick={onOpenShiftManager} textColor={contrastTextColor(HOME_COLOR.p)} />
         </div>
       </div>
       <CurvedShelf bg={HOME_COLOR.p} />

@@ -1,4 +1,5 @@
 import { Check, Plus, X, Activity, Download, BarChart2, Settings, Lock } from "lucide-react";
+import { contrastTextColor } from "../constants";
 
 export function BottomNav({ color, light, fabShadow, navTab, setNavTab, isSave, onFAB, onExport, onActivity, onStats, onSettings, onLock, onCancel, isLocked, lockColor }: {
   color: string; light: string; fabShadow: string; navTab: string; setNavTab: (t: string) => void;
@@ -39,7 +40,7 @@ export function BottomNav({ color, light, fabShadow, navTab, setNavTab, isSave, 
 
       {/* Center FAB */}
       <button onClick={onFAB} style={{ width: 62, height: 62, borderRadius: "50%", background: color, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: fabShadow, transition: "all 0.25s ease", marginTop: -28, flexShrink: 0 }}>
-        {isSave ? <Check size={28} color="#fff" strokeWidth={3} /> : <Plus size={30} color="#fff" strokeWidth={2.5} />}
+        {isSave ? <Check size={28} color={contrastTextColor(color)} strokeWidth={3} /> : <Plus size={30} color={contrastTextColor(color)} strokeWidth={2.5} />}
       </button>
 
       {/* Right quarter */}
