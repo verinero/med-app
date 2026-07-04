@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { db, callsToCSV, downloadCSV, medsSummary, interventionsSummary, csvToCallRecords, presetsToCSV, parsePresetsCSV, type CallRecord, type Shift, type Hospital, type Medication, type InterventionDef, type ChiefComplaint, type ParsedPresets } from "../db";
+import { db, recordsToCSV, downloadCSV, medsSummary, interventionsSummary, csvToRecords, presetsToCSV, parsePresetsCSV, type CallRecord, type Shift, type Hospital, type Medication, type InterventionDef, type ChiefComplaint, type ParsedPresets } from "../db";
 import { HOME_COLOR, TH, T_CHIPS, M_CHIPS, HOSPITALS, DEFAULT_MEDS, DEFAULT_INTERVENTIONS, type Screen } from "./constants";
 import { blankForm, callToForm, dateStr, dateStrFor, sevenDaysAgo, type CallForm } from "./callForm";
 import { blankShiftDraft, toDatetimeLocalValue, fromDatetimeLocalValue, type ShiftDraft } from "./shiftForm";
@@ -86,9 +86,9 @@ export default function App() {
   const [deleteComplaintTarget, setDeleteComplaintTarget] = useState<number | null>(null);
 
   const [importFileName, setImportFileName] = useState<string | null>(null);
-  const [importPreview, setImportPreview] = useState<Omit<CallRecord, "id">[] | null>(null);
+  const [importPreview, setImportPreview] = useState<{ calls: (Omit<CallRecord, "id"> & { shiftStartKey?: string })[]; shifts: Omit<Shift, "id">[] } | null>(null);
   const [importErrors, setImportErrors] = useState<string[]>([]);
-  const [importSuccessCount, setImportSuccessCount] = useState<number | null>(null);
+  const [importSuccessCount, setImportSuccessCount] = useState<{ calls: number; shifts: number; shiftsSkipped: number } | null>(null);
 
   const [importPresetsFileName, setImportPresetsFileName] = useState<string | null>(null);
   const [importPresetsPreview, setImportPresetsPreview] = useState<PresetsDiff | null>(null);
@@ -429,26 +429,54 @@ export default function App() {
 
   // ── CSV Import (Settings) ──────────────────────────────────
   // Import always creates new calls — the CSV's ID column is discarded
-  // (parsed out already in csvToCallRecords), so re-importing the same
-  // file can never overwrite or corrupt an existing record.
+  // (parsed out already in csvToRecords), so re-importing the same
+  // file can never overwrite or corrupt an existing call. Shifts are the
+  // exception: a shift already on the device (same startTime+unit+type) is
+  // silently skipped rather than duplicated, since re-importing the same
+  // export shouldn't grow shift history every time.
   function handleImportFileSelected(fileName: string, text: string) {
-    const { records, errors } = csvToCallRecords(text);
+    const { calls, shifts, errors } = csvToRecords(text);
     setImportFileName(fileName);
-    setImportPreview(records);
+    setImportPreview({ calls, shifts });
     setImportErrors(errors);
     setImportSuccessCount(null);
   }
 
+  function shiftKey(startTime: number, unitNum: string, unitType: string) {
+    return `${startTime}|${unitNum}|${unitType}`;
+  }
+
   async function confirmImport() {
-    if (!importPreview || importPreview.length === 0) return;
-    await db.calls.bulkAdd(importPreview as CallRecord[]);
-    const [updated, all] = await Promise.all([
+    if (!importPreview || (importPreview.calls.length === 0 && importPreview.shifts.length === 0)) return;
+
+    const shiftIdByKey = new Map<string, number>();
+    for (const s of shifts) {
+      if (s.id != null) shiftIdByKey.set(shiftKey(s.startTime, s.unitNum, s.unitType), s.id);
+    }
+    const newShifts = importPreview.shifts.filter(s => !shiftIdByKey.has(shiftKey(s.startTime, s.unitNum, s.unitType)));
+    const shiftsSkipped = importPreview.shifts.length - newShifts.length;
+    if (newShifts.length > 0) {
+      const newIds = await db.shifts.bulkAdd(newShifts, undefined, { allKeys: true }) as number[];
+      newShifts.forEach((s, i) => shiftIdByKey.set(shiftKey(s.startTime, s.unitNum, s.unitType), newIds[i]));
+    }
+
+    const callsToInsert: CallRecord[] = importPreview.calls.map(({ shiftStartKey, ...call }) => {
+      const shiftId = shiftStartKey != null
+        ? shiftIdByKey.get(shiftKey(Date.parse(shiftStartKey), call.unitNum, call.unitType))
+        : undefined;
+      return { ...call, shiftId } as CallRecord;
+    });
+    if (callsToInsert.length > 0) await db.calls.bulkAdd(callsToInsert);
+
+    const [updated, all, allShifts] = await Promise.all([
       db.calls.orderBy("timestamp").reverse().limit(100).toArray(),
       db.calls.toArray(),
+      db.shifts.toArray(),
     ]);
     setSavedCalls(updated);
     setAllCalls(all);
-    setImportSuccessCount(importPreview.length);
+    setShifts(allShifts);
+    setImportSuccessCount({ calls: callsToInsert.length, shifts: newShifts.length, shiftsSkipped });
     setImportPreview(null);
     setImportFileName(null);
   }
@@ -757,8 +785,11 @@ export default function App() {
   }
 
   async function exportCSV() {
-    const all = await db.calls.orderBy("timestamp").toArray();
-    downloadCSV(callsToCSV(all), `ems-calls-${today.replace(/ /g, "-")}.csv`);
+    const [all, allShifts] = await Promise.all([
+      db.calls.orderBy("timestamp").toArray(),
+      db.shifts.toArray(),
+    ]);
+    downloadCSV(recordsToCSV(all, allShifts), `ems-calls-${today.replace(/ /g, "-")}.csv`);
   }
 
   async function exportPDF() {

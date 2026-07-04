@@ -25,7 +25,7 @@ export function ExportScreen({
       <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 104px", display: "flex", flexDirection: "column", gap: 12 }}>
         <FormCard accent={HOME_COLOR.p}>
           <CardHead color={HOME_COLOR.p} label="Export Calls" />
-          <p style={{ fontSize: 13, color: "#6b7280", margin: 0 }}>Download all records from your local database.</p>
+          <p style={{ fontSize: 13, color: "#6b7280", margin: 0 }}>Download all calls and shifts from your local database as one CSV.</p>
           <button onClick={onExportCSV} style={{ ...primaryBtn, background: "#2E7D32", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             <Download size={16} color="#fff" /> Export as CSV
           </button>

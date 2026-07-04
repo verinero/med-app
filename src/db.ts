@@ -184,26 +184,48 @@ export function interventionsSummary(c: CallRecord): string {
   return legacy.join("; ");
 }
 
-export function callsToCSV(calls: CallRecord[]): string {
+// Calls and Shifts round-trip via a single combined CSV, distinguished by a
+// "RecordType" column — they were split into two exports at first, but a
+// call is fundamentally linked to its shift (unitNum/unitType/date are
+// always derived from the tagged shift, per CLAUDE.md), so importing one
+// without the other left calls "orphaned" (no shiftId, no crew). A call
+// row's own ShiftStart/Unit/Type triple is the join key back to its Shift
+// row — no separate id column needed since Dexie reassigns ids on insert.
+export function recordsToCSV(calls: CallRecord[], shifts: Shift[]): string {
   const headers = [
-    "ID", "Date", "Unit", "Type", "Mode", "Age", "Sex", "Complaint",
+    "RecordType", "ID", "Date", "Unit", "Type", "Mode", "Age", "Sex", "Complaint",
     "HR", "BP", "SpO2", "RR", "GCS", "Glucose",
     "Interventions",
     "Oxygen", "O2 Type", "O2 Liters",
     "Medication", "Saline(mL)", "LR(mL)", "Medications",
     "IV", "Gauge", "IV Side", "IV Site", "IV Established", "IV Attempts",
     "Allergies", "Med History", "Notes", "Call Status", "Hospital",
+    "ShiftStart", "ShiftEnd", "Crew",
   ];
-  const rows = calls.map(c => [
-    c.id ?? "", `"${c.date}"`, c.unitNum, c.unitType, c.mode, c.age, c.sex, `"${c.complaint}"`,
-    c.hr, c.bp, c.spo2, c.rr, c.gcs, c.glucose,
-    `"${interventionsSummary(c)}"`,
-    c.oxyOn ? "Y" : "N", c.oxyType, c.oxyLiters,
-    c.medOn ? "Y" : "N", c.salineAmt, c.lrAmt, `"${medsSummary(c)}"`,
-    c.ivOn ? "Y" : "N", c.gauge, c.ivLR, c.ivSite, c.ivOn ? (c.ivEstablished ? "Y" : "N") : "", c.ivAttempts || "",
-    `"${c.allergies}"`, `"${c.medHistory}"`, `"${c.notes}"`, c.callStatus || "", c.hospital || "",
+  const shiftRows = shifts.map(s => [
+    "Shift", s.id ?? "", "", s.unitNum, s.unitType, "", "", "", "",
+    "", "", "", "", "", "",
+    "",
+    "", "", "",
+    "", "", "", "",
+    "", "", "", "", "", "",
+    "", "", "", "", "",
+    new Date(s.startTime).toISOString(), s.endTime != null ? new Date(s.endTime).toISOString() : "", `"${s.crew}"`,
   ]);
-  return [headers, ...rows].map(r => r.join(",")).join("\n");
+  const callRows = calls.map(c => {
+    const taggedShift = c.shiftId != null ? shifts.find(s => s.id === c.shiftId) : undefined;
+    return [
+      "Call", c.id ?? "", `"${c.date}"`, c.unitNum, c.unitType, c.mode, c.age, c.sex, `"${c.complaint}"`,
+      c.hr, c.bp, c.spo2, c.rr, c.gcs, c.glucose,
+      `"${interventionsSummary(c)}"`,
+      c.oxyOn ? "Y" : "N", c.oxyType, c.oxyLiters,
+      c.medOn ? "Y" : "N", c.salineAmt, c.lrAmt, `"${medsSummary(c)}"`,
+      c.ivOn ? "Y" : "N", c.gauge, c.ivLR, c.ivSite, c.ivOn ? (c.ivEstablished ? "Y" : "N") : "", c.ivAttempts || "",
+      `"${c.allergies}"`, `"${c.medHistory}"`, `"${c.notes}"`, c.callStatus || "", c.hospital || "",
+      taggedShift ? new Date(taggedShift.startTime).toISOString() : "", "", "",
+    ];
+  });
+  return [headers, ...shiftRows, ...callRows].map(r => r.join(",")).join("\n");
 }
 
 export function downloadCSV(csv: string, filename: string) {
@@ -444,4 +466,97 @@ export function csvToCallRecords(text: string): { records: Omit<CallRecord, "id"
     });
   }
   return { records, errors };
+}
+
+export interface ParsedRecords {
+  calls: (Omit<CallRecord, "id"> & { shiftStartKey?: string })[];
+  shifts: Omit<Shift, "id">[];
+  errors: string[];
+}
+
+// Parses a CSV produced by recordsToCSV(): Calls and Shifts combined,
+// distinguished by a "RecordType" column. Each call carries its shift's
+// `shiftStartKey` (an ISO timestamp) forward — not a real CallRecord field,
+// consumed by the importer to relink `shiftId` once shift rows have been
+// inserted (or matched against an existing shift) and their real ids are
+// known. Files exported before Shifts were included have no "RecordType"
+// column and fall back to the old calls-only parse so they still import.
+export function csvToRecords(text: string): ParsedRecords {
+  const rows = parseCSVText(text);
+  if (rows.length === 0) return { calls: [], shifts: [], errors: ["File is empty."] };
+
+  const header = rows[0];
+  const col = (name: string) => header.indexOf(name);
+  if (col("RecordType") === -1) {
+    const { records, errors } = csvToCallRecords(text);
+    return { calls: records, shifts: [], errors };
+  }
+
+  const missing = REQUIRED_HEADERS.filter(h => col(h) === -1);
+  if (missing.length > 0) {
+    return { calls: [], shifts: [], errors: [`This doesn't look like an export from this app (missing columns: ${missing.join(", ")}).`] };
+  }
+  const get = (r: string[], name: string) => (col(name) === -1 ? "" : (r[col(name)] ?? ""));
+
+  const calls: (Omit<CallRecord, "id"> & { shiftStartKey?: string })[] = [];
+  const shifts: Omit<Shift, "id">[] = [];
+  const errors: string[] = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (r.length === 1 && r[0] === "") continue;
+    const recordType = get(r, "RecordType");
+
+    if (recordType === "Shift") {
+      const startStr = get(r, "ShiftStart");
+      const startTime = Date.parse(startStr);
+      if (isNaN(startTime)) { errors.push(`Row ${i + 1}: unparseable shift start "${startStr}", skipped.`); continue; }
+      const endStr = get(r, "ShiftEnd");
+      const endTime = endStr ? Date.parse(endStr) : NaN;
+      shifts.push({
+        startTime, endTime: isNaN(endTime) ? undefined : endTime,
+        crew: get(r, "Crew"), unitNum: get(r, "Unit"), unitType: get(r, "Type"),
+      });
+    } else if (recordType === "Call") {
+      if (r.length < header.length - 5) { errors.push(`Row ${i + 1}: too few columns, skipped.`); continue; }
+      const dateStr = get(r, "Date");
+      const timestamp = Date.parse(dateStr);
+      if (isNaN(timestamp)) { errors.push(`Row ${i + 1}: unparseable date "${dateStr}", skipped.`); continue; }
+      const mode = get(r, "Mode");
+      if (mode !== "trauma" && mode !== "medical") { errors.push(`Row ${i + 1}: unknown mode "${mode}", skipped.`); continue; }
+      const { ageYears, ageMonths } = parseAge(get(r, "Age"));
+      const hospital = get(r, "Hospital") || undefined;
+
+      calls.push({
+        date: dateStr, timestamp,
+        unitNum: get(r, "Unit"), unitType: get(r, "Type"),
+        mode, age: get(r, "Age"), ageYears, ageMonths,
+        sex: get(r, "Sex"), complaint: get(r, "Complaint"),
+        hr: get(r, "HR"), bp: get(r, "BP"), spo2: get(r, "SpO2"), rr: get(r, "RR"),
+        gcs: get(r, "GCS"), glucose: get(r, "Glucose"),
+        alertOriented: "",
+        interventions: parseInterventions(get(r, "Interventions")),
+        oxyOn: get(r, "Oxygen") === "Y", oxyType: get(r, "O2 Type"),
+        oxyLiters: parseFloat(get(r, "O2 Liters")) || 0,
+        medOn: get(r, "Medication") === "Y",
+        salineAmt: parseInt(get(r, "Saline(mL)"), 10) || 0,
+        lrAmt: parseInt(get(r, "LR(mL)"), 10) || 0,
+        zofran: false, toradol: false,
+        meds: parseMeds(get(r, "Medications")),
+        ivOn: get(r, "IV") === "Y", gauge: get(r, "Gauge"), ivLR: get(r, "IV Side"), ivSite: get(r, "IV Site"),
+        ivEstablished: get(r, "IV Established") === "" ? undefined : get(r, "IV Established") === "Y",
+        ivAttempts: get(r, "IV Attempts") || undefined,
+        allergies: get(r, "Allergies"), medHistory: get(r, "Med History"), notes: get(r, "Notes"),
+        callStatus: get(r, "Call Status") || undefined,
+        techedCall: false, acuity: "",
+        hospital, transportMode: hospital ? "hospital" : "",
+        locked: false,
+        shiftStartKey: get(r, "ShiftStart") || undefined,
+      });
+    } else {
+      errors.push(`Row ${i + 1}: unknown RecordType "${recordType}", skipped.`);
+    }
+  }
+
+  return { calls, shifts, errors };
 }

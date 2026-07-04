@@ -269,7 +269,10 @@ function ManageComplaintsCard({ items, onAdd, onRequestDelete }: {
 }
 
 function ImportCallsCard({ fileName, preview, errors, successCount, onFileSelected, onConfirm, onCancel }: {
-  fileName: string | null; preview: Omit<CallRecord, "id">[] | null; errors: string[]; successCount: number | null;
+  fileName: string | null;
+  preview: { calls: (Omit<CallRecord, "id"> & { shiftStartKey?: string })[]; shifts: unknown[] } | null;
+  errors: string[];
+  successCount: { calls: number; shifts: number; shiftsSkipped: number } | null;
   onFileSelected: (name: string, text: string) => void; onConfirm: () => void; onCancel: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -281,11 +284,12 @@ function ImportCallsCard({ fileName, preview, errors, successCount, onFileSelect
     reader.readAsText(file);
     e.target.value = ""; // allow re-selecting the same file later
   }
+  const total = preview ? preview.calls.length + preview.shifts.length : 0;
   return (
     <FormCard accent={HOME_COLOR.p}>
       <CardHead color={HOME_COLOR.p} label="Import Calls" />
       <p style={{ fontSize: 13, color: "#6b7280", margin: 0 }}>
-        Restore calls from a CSV export. Always added as new, nothing existing is overwritten.
+        Restore calls and shifts from a CSV export. Duplicate shifts are skipped; calls are always added as new.
       </p>
       <input ref={inputRef} type="file" accept=".csv" onChange={handleChange} style={{ display: "none" }} />
       <button onClick={() => inputRef.current?.click()} style={{ ...primaryBtn, background: HOME_COLOR.p }}>
@@ -298,18 +302,23 @@ function ImportCallsCard({ fileName, preview, errors, successCount, onFileSelect
         </div>
       )}
 
-      {preview && preview.length > 0 && (
+      {preview && total > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ fontSize: 13, color: "#0d1117" }}>Found <strong>{preview.length}</strong> call{preview.length === 1 ? "" : "s"} in <em>{fileName}</em>.</div>
+          <div style={{ fontSize: 13, color: "#0d1117" }}>
+            Found <strong>{preview.calls.length}</strong> call{preview.calls.length === 1 ? "" : "s"} and <strong>{preview.shifts.length}</strong> shift{preview.shifts.length === 1 ? "" : "s"} in <em>{fileName}</em>.
+          </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={onCancel} style={{ flex: 1, padding: "12px 0", borderRadius: 12, border: "1.5px solid #E2E5EC", background: "#F8F9FC", fontSize: 14, fontWeight: 700, color: "#6b7280", cursor: "pointer" }}>Cancel</button>
-            <button onClick={onConfirm} style={{ flex: 1, padding: "12px 0", borderRadius: 12, border: "none", background: "#16A34A", fontSize: 14, fontWeight: 700, color: "#fff", cursor: "pointer" }}>Import {preview.length}</button>
+            <button onClick={onConfirm} style={{ flex: 1, padding: "12px 0", borderRadius: 12, border: "none", background: "#16A34A", fontSize: 14, fontWeight: 700, color: "#fff", cursor: "pointer" }}>Import {total}</button>
           </div>
         </div>
       )}
 
       {successCount != null && (
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#16A34A" }}>Imported {successCount} call{successCount === 1 ? "" : "s"}.</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#16A34A" }}>
+          Imported {successCount.calls} call{successCount.calls === 1 ? "" : "s"} and {successCount.shifts} shift{successCount.shifts === 1 ? "" : "s"}.
+          {successCount.shiftsSkipped > 0 ? ` (${successCount.shiftsSkipped} duplicate shift${successCount.shiftsSkipped === 1 ? "" : "s"} skipped.)` : ""}
+        </div>
       )}
     </FormCard>
   );
@@ -441,7 +450,10 @@ export function SettingsScreen({
   chiefComplaints: ChiefComplaint[]; onAddComplaint: (mode: "trauma" | "medical", name: string) => void;
   deleteComplaintTarget: number | null; deleteComplaintMessage?: string;
   onRequestDeleteComplaint: (id: number) => void; onCancelDeleteComplaint: () => void; onConfirmDeleteComplaint: () => void;
-  importFileName: string | null; importPreview: Omit<CallRecord, "id">[] | null; importErrors: string[]; importSuccessCount: number | null;
+  importFileName: string | null;
+  importPreview: { calls: (Omit<CallRecord, "id"> & { shiftStartKey?: string })[]; shifts: unknown[] } | null;
+  importErrors: string[];
+  importSuccessCount: { calls: number; shifts: number; shiftsSkipped: number } | null;
   onImportFileSelected: (name: string, text: string) => void; onConfirmImport: () => void; onCancelImport: () => void;
   importPresetsFileName: string | null; importPresetsPreview: PresetsDiff | null; importPresetsErrors: string[]; importPresetsSummary: string | null;
   onImportPresetsFileSelected: (name: string, text: string) => void; onConfirmImportPresets: () => void; onCancelImportPresets: () => void;
