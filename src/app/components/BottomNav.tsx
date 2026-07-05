@@ -1,10 +1,14 @@
-import { Check, Plus, X, Activity, Download, BarChart2, Settings, Lock } from "lucide-react";
+import { Check, Plus, X, Activity, Map, BarChart2, Settings, Lock, type LucideIcon } from "lucide-react";
 import { contrastTextColor } from "../constants";
 
-export function BottomNav({ color, light, fabShadow, navTab, setNavTab, isSave, onFAB, onExport, onActivity, onStats, onSettings, onLock, onCancel, isLocked, lockColor }: {
+export function BottomNav({ color, light, fabShadow, navTab, setNavTab, isSave, onFAB, onMap, onActivity, onStats, onSettings, onLock, onCancel, isLocked, lockColor, fabIcon: FabIcon, fabActive }: {
   color: string; light: string; fabShadow: string; navTab: string; setNavTab: (t: string) => void;
-  isSave: boolean; onFAB: () => void; onExport: () => void; onActivity?: () => void; onStats?: () => void; onSettings?: () => void;
+  isSave: boolean; onFAB: () => void; onMap: () => void; onActivity?: () => void; onStats?: () => void; onSettings?: () => void;
   onLock?: () => void; onCancel?: () => void; isLocked?: boolean; lockColor?: string;
+  // Lets a screen repurpose the center FAB for something other than New
+  // Call/Save (e.g. the Map screen's "add a pin" toggle) without a
+  // separate isSave-style boolean per use case.
+  fabIcon?: LucideIcon; fabActive?: boolean;
 }) {
   const lc = lockColor ?? color;
   return (
@@ -39,8 +43,16 @@ export function BottomNav({ color, light, fabShadow, navTab, setNavTab, isSave, 
       </div>
 
       {/* Center FAB */}
-      <button onClick={onFAB} style={{ width: 62, height: 62, borderRadius: "50%", background: color, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: fabShadow, transition: "all 0.25s ease", marginTop: -28, flexShrink: 0 }}>
-        {isSave ? <Check size={28} color={contrastTextColor(color)} strokeWidth={3} /> : <Plus size={30} color={contrastTextColor(color)} strokeWidth={2.5} />}
+      <button onClick={onFAB} style={{
+        width: 62, height: 62, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+        transition: "all 0.25s ease", marginTop: -28, flexShrink: 0,
+        background: fabActive ? "#fff" : color,
+        border: fabActive ? `2.5px solid ${color}` : "none",
+        boxShadow: fabActive ? "0 8px 28px rgba(0,0,0,0.18)" : fabShadow,
+      }}>
+        {FabIcon
+          ? <FabIcon size={26} color={fabActive ? color : contrastTextColor(color)} strokeWidth={2.5} />
+          : isSave ? <Check size={28} color={contrastTextColor(color)} strokeWidth={3} /> : <Plus size={30} color={contrastTextColor(color)} strokeWidth={2.5} />}
       </button>
 
       {/* Right quarter */}
@@ -54,10 +66,10 @@ export function BottomNav({ color, light, fabShadow, navTab, setNavTab, isSave, 
           </button>
         ) : (
           <div style={{ display: "flex", gap: 18 }}>
-            {[{ key: "export", I: Download, l: "Export" }, { key: "settings", I: Settings, l: "Settings" }].map(({ key, I, l }) => {
+            {[{ key: "map", I: Map, l: "Map" }, { key: "settings", I: Settings, l: "Settings" }].map(({ key, I, l }) => {
               const active = navTab === key;
               return (
-                <button key={key} onClick={() => { setNavTab(key); if (key === "export") onExport(); if (key === "settings") onSettings?.(); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: 0, minWidth: 44 }}>
+                <button key={key} onClick={() => { setNavTab(key); if (key === "map") onMap(); if (key === "settings") onSettings?.(); }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", cursor: "pointer", padding: 0, minWidth: 44 }}>
                   <div style={{ width: 36, height: 36, borderRadius: 10, background: active ? light : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <I size={20} color={active ? color : "#9ca3af"} strokeWidth={active ? 2.5 : 2} />
                   </div>

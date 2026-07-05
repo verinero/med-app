@@ -1,5 +1,5 @@
 // ── Types ────────────────────────────────────────────────────
-export type Screen = "home" | "newCall" | "export" | "stats" | "settings";
+export type Screen = "home" | "newCall" | "map" | "export" | "stats" | "settings";
 export type Mode   = "trauma" | "medical";
 export type UType  = "B" | "IM" | "AM";
 export type LR     = "L" | "R";
@@ -148,3 +148,29 @@ export const DEFAULT_INTERVENTIONS: { name: string; mode: Mode; notesEnabled: bo
   { name: "Bandaging",              mode: "trauma",  notesEnabled: false },
   { name: "12-Lead ECG",            mode: "medical", notesEnabled: true },
 ];
+// One-time seed for the locationCategories table — the live list lives in
+// Dexie and is user-editable from Settings after that (same pattern as
+// HOSPITALS/DEFAULT_MEDS above). Locations (pins) themselves have no seed
+// data — they're the crew's own personal spots, starting empty.
+export const DEFAULT_LOCATION_CATEGORIES = ["Best Snacks", "Best Post Spots", "Best Dog Parks", "Best Restaurants"];
+// Rotating palette used to auto-assign a LocationCategory's marker/chip
+// color by its position in the list, unless the user overrides it via the
+// color wheel in Settings (LocationCategory.color).
+export const LOCATION_CATEGORY_PALETTE = [
+  "#7B1FA2", "#1976D2", "#2E7D32", "#E65100", "#C2185B", "#00838F", "#F9A825", "#5D4037",
+];
+// Fallback map center (Stone Mountain, GA area) used when geolocation is
+// denied/unavailable and there are no saved pins to center on instead.
+export const DEFAULT_MAP_CENTER = { lat: 33.8080924, lng: -84.1706273 };
+
+// A single preset pin (the unit's station), seeded once alongside the
+// location categories above — unlike other pins it comes with its own
+// fixed gray category color rather than an auto-assigned palette color.
+export const STATION_CATEGORY = { name: "Station", color: "#6b7280" };
+export const STATION_LOCATION = {
+  name: "Station",
+  category: STATION_CATEGORY.name,
+  lat: DEFAULT_MAP_CENTER.lat,
+  lng: DEFAULT_MAP_CENTER.lng,
+  address: "1380 Beverage Drive, Suite D, Stone Mountain, GA 30083",
+};

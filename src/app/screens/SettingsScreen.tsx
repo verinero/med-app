@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Trash2, Lock, ArrowUp, ArrowDown, Plus } from "lucide-react";
-import { HOME_COLOR, ROUTES, COLOR_PRESETS, hsvToHex, hexToHsv, contrastTextColor } from "../constants";
-import type { CallRecord, Hospital, Medication, InterventionDef, ChiefComplaint } from "../../db";
+import { ChevronDown, ChevronUp, ChevronRight, Trash2, Lock, ArrowUp, ArrowDown, Plus, Download } from "lucide-react";
+import { HOME_COLOR, ROUTES, COLOR_PRESETS, LOCATION_CATEGORY_PALETTE, hsvToHex, hexToHsv, contrastTextColor } from "../constants";
+import type { CallRecord, Hospital, Medication, InterventionDef, ChiefComplaint, Location, LocationCategory } from "../../db";
 import type { PresetsDiff } from "../App";
 import { PhoneShell } from "../components/PhoneShell";
 import { CurvedShelf } from "../components/CurvedShelf";
@@ -187,6 +187,78 @@ function CustomizeColorsCard({ themeHex, onSetColor, onReset }: {
             padding: "10px 0", borderRadius: 11, border: "1.5px solid #E2E5EC", background: "#F8F9FC",
             fontSize: 13, fontWeight: 700, color: "#6b7280", cursor: "pointer",
           }}>Reset to Defaults</button>
+        </>
+      )}
+    </FormCard>
+  );
+}
+
+// Categories for the Map screen's pins. Mirrors ManageListCard's add/delete
+// shape, but each row also gets a color swatch (auto-assigned from
+// LOCATION_CATEGORY_PALETTE by list position unless the category has a
+// manual override) that opens the same ColorWheel used for theme colors.
+function ManageLocationCategoriesCard({ items, locations, onAdd, onSetColor, onRequestDelete }: {
+  items: LocationCategory[]; locations: Location[];
+  onAdd: (name: string) => void;
+  onSetColor: (id: number, color: string) => void;
+  onRequestDelete: (id: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [wheelForId, setWheelForId] = useState<number | null>(null);
+  function submit() {
+    if (!draft.trim()) return;
+    onAdd(draft);
+    setDraft("");
+  }
+  return (
+    <FormCard accent={HOME_COLOR.p}>
+      <button onClick={() => setOpen(o => !o)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "none", border: "none", padding: 0, cursor: "pointer", width: "100%" }}>
+        <CardHead color={HOME_COLOR.p} label="Manage Location Categories" />
+        {open ? <ChevronUp size={16} color="#9ca3af" /> : <ChevronDown size={16} color="#9ca3af" />}
+      </button>
+      {open && (
+        <>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input type="text" value={draft} onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") submit(); }}
+              placeholder="e.g. Best Coffee" style={{ ...textInputStyle, flex: 1 }} />
+            <button onClick={submit} style={{
+              padding: "0 18px", border: "none", borderRadius: 11,
+              background: HOME_COLOR.p, color: contrastTextColor(HOME_COLOR.p), fontSize: 14, fontWeight: 700, cursor: "pointer",
+            }}>Add</button>
+          </div>
+          {items.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+              {items.map((item, i) => {
+                const color = item.color || LOCATION_CATEGORY_PALETTE[i % LOCATION_CATEGORY_PALETTE.length];
+                const pinCount = locations.filter(l => l.category === item.name).length;
+                return (
+                  <div key={item.id} style={{
+                    display: "flex", flexDirection: "column", gap: 8,
+                    padding: "9px 12px", background: "#F8F9FC", borderRadius: 10, border: "1px solid #ECEEF2",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <button
+                          onClick={() => item.id != null && setWheelForId(wheelForId === item.id ? null : item.id)}
+                          style={{ width: 20, height: 20, borderRadius: "50%", background: color, border: "2px solid #fff", boxShadow: "0 0 0 1px #E2E5EC", cursor: "pointer", padding: 0, flexShrink: 0 }}
+                        />
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "#0d1117" }}>{item.name}</span>
+                        {pinCount > 0 && <span style={{ fontSize: 11, color: "#9ca3af" }}>({pinCount} pin{pinCount === 1 ? "" : "s"})</span>}
+                      </div>
+                      <button onClick={() => item.id != null && onRequestDelete(item.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", display: "flex", flexShrink: 0 }}>
+                        <Trash2 size={14} color="#D1D5DB" />
+                      </button>
+                    </div>
+                    {wheelForId === item.id && (
+                      <ColorWheel value={color} onPick={hex => item.id != null && onSetColor(item.id, hex)} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </>
       )}
     </FormCard>
@@ -547,7 +619,7 @@ function ImportPresetsCard({ fileName, preview, errors, log, onFileSelected, onC
 }
 
 export function SettingsScreen({
-  navTab, setNavTab, today, onHome, onStats, onExport, onNewCall,
+  navTab, setNavTab, today, onHome, onStats, onMap, onOpenExport, onNewCall,
   showClearDataConfirm, onRequestClearData, onCancelClearData, onConfirmClearData,
   hospitals, onAddHospital, deleteHospitalTarget, deleteHospitalMessage,
   onRequestDeleteHospital, onCancelDeleteHospital, onConfirmDeleteHospital,
@@ -558,6 +630,9 @@ export function SettingsScreen({
   onSetInterventionNotesEnabled, onMoveIntervention,
   chiefComplaints, onAddComplaint, deleteComplaintTarget, deleteComplaintMessage,
   onRequestDeleteComplaint, onCancelDeleteComplaint, onConfirmDeleteComplaint,
+  locations, locationCategories, onAddLocationCategory, onSetLocationCategoryColor,
+  deleteLocationCategoryTarget, deleteLocationCategoryMessage,
+  onRequestDeleteLocationCategory, onCancelDeleteLocationCategory, onConfirmDeleteLocationCategory,
   themeHex, onSetThemeColor, onResetThemeColors,
   importFileName, importPreview, importErrors, importLog,
   onImportFileSelected, onConfirmImport, onCancelImport,
@@ -565,7 +640,7 @@ export function SettingsScreen({
   onImportPresetsFileSelected, onConfirmImportPresets, onCancelImportPresets,
 }: {
   navTab: string; setNavTab: (t: string) => void; today: string;
-  onHome: () => void; onStats: () => void; onExport: () => void; onNewCall: () => void;
+  onHome: () => void; onStats: () => void; onMap: () => void; onOpenExport: () => void; onNewCall: () => void;
   showClearDataConfirm: boolean; onRequestClearData: () => void; onCancelClearData: () => void; onConfirmClearData: () => void;
   hospitals: Hospital[]; onAddHospital: (name: string) => void;
   deleteHospitalTarget: number | null; deleteHospitalMessage?: string;
@@ -581,6 +656,10 @@ export function SettingsScreen({
   chiefComplaints: ChiefComplaint[]; onAddComplaint: (mode: "trauma" | "medical", name: string) => void;
   deleteComplaintTarget: number | null; deleteComplaintMessage?: string;
   onRequestDeleteComplaint: (id: number) => void; onCancelDeleteComplaint: () => void; onConfirmDeleteComplaint: () => void;
+  locations: Location[]; locationCategories: LocationCategory[];
+  onAddLocationCategory: (name: string) => void; onSetLocationCategoryColor: (id: number, color: string) => void;
+  deleteLocationCategoryTarget: number | null; deleteLocationCategoryMessage?: string;
+  onRequestDeleteLocationCategory: (id: number) => void; onCancelDeleteLocationCategory: () => void; onConfirmDeleteLocationCategory: () => void;
   themeHex: { home: string; trauma: string; medical: string };
   onSetThemeColor: (theme: "home" | "trauma" | "medical", hex: string) => void; onResetThemeColors: () => void;
   importFileName: string | null;
@@ -629,6 +708,13 @@ export function SettingsScreen({
         onCancel={onCancelDeleteComplaint}
         onConfirm={onConfirmDeleteComplaint}
       />
+      <DeleteModal
+        show={deleteLocationCategoryTarget != null}
+        title="Delete this category?"
+        message={deleteLocationCategoryMessage}
+        onCancel={onCancelDeleteLocationCategory}
+        onConfirm={onConfirmDeleteLocationCategory}
+      />
       <div style={{ background: HOME_COLOR.p, padding: "16px 20px 18px" }}>
         <div style={{ ...eyebrow, color: contrastTextColor(HOME_COLOR.p), opacity: 0.65 }}>Weewoo Tracker</div>
         <h1 style={{ margin: 0, color: contrastTextColor(HOME_COLOR.p), fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.1 }}>Settings</h1>
@@ -653,7 +739,21 @@ export function SettingsScreen({
         <SLabel>Chief Complaints</SLabel>
         <ManageComplaintsCard items={chiefComplaints} onAdd={onAddComplaint} onRequestDelete={onRequestDeleteComplaint} />
 
+        <SLabel>Location Categories</SLabel>
+        <ManageLocationCategoriesCard items={locationCategories} locations={locations}
+          onAdd={onAddLocationCategory} onSetColor={onSetLocationCategoryColor} onRequestDelete={onRequestDeleteLocationCategory} />
+
         <SLabel>Data</SLabel>
+        <button onClick={onOpenExport} style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%",
+          padding: "14px 16px", borderRadius: 14, border: "1.5px solid #E2E5EC", background: "#fff",
+          cursor: "pointer", marginBottom: 12,
+        }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 700, color: "#0d1117" }}>
+            <Download size={16} color={HOME_COLOR.p} /> Export Data
+          </span>
+          <ChevronRight size={16} color="#9ca3af" />
+        </button>
         <ImportCallsCard
           fileName={importFileName} preview={importPreview} errors={importErrors} log={importLog}
           onFileSelected={onImportFileSelected} onConfirm={onConfirmImport} onCancel={onCancelImport}
@@ -677,7 +777,7 @@ export function SettingsScreen({
         </FormCard>
       </div>
 
-      <BottomNav color={HOME_COLOR.p} light={HOME_COLOR.l} fabShadow={HOME_COLOR.fab} navTab={navTab} setNavTab={setNavTab} isSave={false} onFAB={onNewCall} onExport={onExport} onActivity={onHome} onStats={onStats} />
+      <BottomNav color={HOME_COLOR.p} light={HOME_COLOR.l} fabShadow={HOME_COLOR.fab} navTab={navTab} setNavTab={setNavTab} isSave={false} onFAB={onNewCall} onMap={onMap} onActivity={onHome} onStats={onStats} />
     </PhoneShell>
   );
 }

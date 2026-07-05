@@ -1,4 +1,4 @@
-import { Download } from "lucide-react";
+import { ChevronLeft, Download } from "lucide-react";
 import { HOME_COLOR, contrastTextColor } from "../constants";
 import { PhoneShell } from "../components/PhoneShell";
 import { CurvedShelf } from "../components/CurvedShelf";
@@ -8,17 +8,23 @@ import { BottomNav } from "../components/BottomNav";
 import { eyebrow, primaryBtn } from "../styles";
 
 export function ExportScreen({
-  totalCalls, today, navTab, setNavTab, onHome, onNewCall, onStats, onSettings, onExportCSV, onExportPDF, onExportPresets,
+  totalCalls, today, navTab, setNavTab, onHome, onNewCall, onStats, onMap, onSettings, onBack, onExportCSV, onExportPDF, onExportPresets, onExportLocations,
 }: {
   totalCalls: number; today: string;
   navTab: string; setNavTab: (t: string) => void;
-  onHome: () => void; onNewCall: () => void; onStats: () => void; onSettings: () => void;
-  onExportCSV: () => void; onExportPDF: () => void; onExportPresets: () => void;
+  onHome: () => void; onNewCall: () => void; onStats: () => void; onMap: () => void; onSettings: () => void; onBack: () => void;
+  onExportCSV: () => void; onExportPDF: () => void; onExportPresets: () => void; onExportLocations: () => void;
 }) {
   const headerText = contrastTextColor(HOME_COLOR.p);
   return (
     <PhoneShell>
       <div style={{ background: HOME_COLOR.p, padding: "16px 20px 18px" }}>
+        <button onClick={onBack} style={{
+          display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: 0, marginBottom: 8,
+          color: headerText, opacity: 0.85, fontSize: 13, fontWeight: 700,
+        }}>
+          <ChevronLeft size={18} color={headerText} /> Back
+        </button>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
             <div style={{ ...eyebrow, color: headerText, opacity: 0.65 }}>Weewoo Tracker</div>
@@ -56,9 +62,19 @@ export function ExportScreen({
             <Download size={16} color="#fff" /> Export as CSV
           </button>
         </FormCard>
+
+        <FormCard accent={HOME_COLOR.p}>
+          <CardHead color={HOME_COLOR.p} label="Export Locations" />
+          <p style={{ fontSize: 13, color: "#6b7280", margin: 0 }}>
+            Download all saved map pins (name, category, coordinates, note) as one CSV.
+          </p>
+          <button onClick={onExportLocations} style={{ ...primaryBtn, background: "#2E7D32", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <Download size={16} color="#fff" /> Export as CSV
+          </button>
+        </FormCard>
       </div>
 
-      <BottomNav color={HOME_COLOR.p} light={HOME_COLOR.l} fabShadow={HOME_COLOR.fab} navTab={navTab} setNavTab={setNavTab} isSave={false} onFAB={onNewCall} onExport={() => {}} onActivity={onHome} onStats={onStats} onSettings={onSettings} />
+      <BottomNav color={HOME_COLOR.p} light={HOME_COLOR.l} fabShadow={HOME_COLOR.fab} navTab={navTab} setNavTab={setNavTab} isSave={false} onFAB={onNewCall} onMap={onMap} onActivity={onHome} onStats={onStats} onSettings={onSettings} />
     </PhoneShell>
   );
 }

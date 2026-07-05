@@ -114,6 +114,32 @@ export interface ChiefComplaint {
   mode: "trauma" | "medical";
 }
 
+// A user-editable category for map pins (e.g. "Best Snacks"). `color` is
+// optional — unset means "use the auto-assigned palette color for this
+// category's position in the list" (see LOCATION_CATEGORY_PALETTE in
+// constants.ts), set means the user manually overrode it via the color wheel.
+export interface LocationCategory {
+  id?: number;
+  name: string;
+  color?: string;
+}
+
+// A saved map pin. `category` is a plain string (not a foreign key) so
+// deleting a LocationCategory never mutates existing pins — same pattern as
+// CallRecord.hospital surviving a Hospital deletion.
+export interface Location {
+  id?: number;
+  name: string;
+  category: string;
+  lat: number;
+  lng: number;
+  // Reverse/forward-geocoded at save time (Nominatim) — best-effort, so it's
+  // optional: a failed/offline lookup still saves the pin, List view just
+  // falls back to showing raw coordinates for that row.
+  address?: string;
+  note?: string;
+}
+
 class EMSDatabase extends Dexie {
   calls!: Table<CallRecord>;
   shifts!: Table<Shift>;
@@ -122,6 +148,8 @@ class EMSDatabase extends Dexie {
   medications!: Table<Medication>;
   interventions!: Table<InterventionDef>;
   chiefComplaints!: Table<ChiefComplaint>;
+  locationCategories!: Table<LocationCategory>;
+  locations!: Table<Location>;
 
   constructor() {
     super("emsDatabase");
@@ -153,6 +181,28 @@ class EMSDatabase extends Dexie {
       medications: "++id, &name",
       interventions: "++id, mode, order",
       chiefComplaints: "++id, mode",
+    });
+    this.version(5).stores({
+      calls: "++id, timestamp, shiftId, mode, date",
+      shifts: "++id, startTime",
+      settings: "++id, key",
+      hospitals: "++id, &name",
+      medications: "++id, &name",
+      interventions: "++id, mode, order",
+      chiefComplaints: "++id, mode",
+      locationCategories: "++id, &name",
+      locations: "++id, category",
+    });
+    this.version(6).stores({
+      calls: "++id, timestamp, shiftId, mode, date",
+      shifts: "++id, startTime",
+      settings: "++id, key",
+      hospitals: "++id, &name",
+      medications: "++id, &name",
+      interventions: "++id, mode, order",
+      chiefComplaints: "++id, mode",
+      locationCategories: "++id, &name",
+      locations: "++id, category",
     });
   }
 }
@@ -330,6 +380,15 @@ export function presetsToCSV(hospitals: Hospital[], medications: Medication[], i
     rows.push(["Intervention", i.name, i.mode, "", i.notesEnabled ? "Y" : "N", String(i.order)]);
   }
   for (const cc of chiefComplaints) rows.push(["Complaint", cc.name, cc.mode, "", "", ""]);
+  return [headers, ...rows].map(r => r.map(f => `"${f.replace(/"/g, '""')}"`).join(",")).join("\n");
+}
+
+// Locations are a separate export from Presets (Hospitals/Medications/
+// Interventions/Chief Complaints) — pins aren't part of that bulk config
+// backup, they get their own dedicated export button instead.
+export function locationsToCSV(locations: Location[]): string {
+  const headers = ["Name", "Category", "Lat", "Lng", "Address", "Note"];
+  const rows = locations.map(l => [l.name, l.category, String(l.lat), String(l.lng), l.address || "", l.note || ""]);
   return [headers, ...rows].map(r => r.map(f => `"${f.replace(/"/g, '""')}"`).join(",")).join("\n");
 }
 

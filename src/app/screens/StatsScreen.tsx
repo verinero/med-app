@@ -21,7 +21,7 @@ import { eyebrow } from "../styles";
 
 export function StatsScreen({
   totalCalls, today, outcomeSegments, hospitalData, ivStats, shiftHistory, shiftsByUnitType, hoursByUnitType, techedByUnitType, acuityData,
-  navTab, setNavTab, onHome, onExport, onNewCall, onSettings,
+  navTab, setNavTab, onHome, onMap, onNewCall, onSettings,
   pillUnitLabel, pillElapsedLabel,
   showShiftManager, shiftManagerTab, setShiftManagerTab, shiftDraft, setShiftFld, editingShiftId,
   onOpenShiftManager, onCloseShiftManager, onSaveShift, onNewShiftInManager, onSelectHistoryShift,
@@ -30,7 +30,7 @@ export function StatsScreen({
   totalCalls: number; today: string; outcomeSegments: CallOutcomeSegment[]; hospitalData: HospitalCount[]; ivStats: IvSuccessStats; shiftHistory: ShiftSummary[];
   shiftsByUnitType: UnitTypeSegment[]; hoursByUnitType: UnitTypeSegment[]; techedByUnitType: TechedByUnitTypeSegment[]; acuityData: AcuitySegment[];
   navTab: string; setNavTab: (t: string) => void;
-  onHome: () => void; onExport: () => void; onNewCall: () => void; onSettings: () => void;
+  onHome: () => void; onMap: () => void; onNewCall: () => void; onSettings: () => void;
   pillUnitLabel: string | null; pillElapsedLabel?: string;
   showShiftManager: boolean; shiftManagerTab: "add" | "history"; setShiftManagerTab: (t: "add" | "history") => void;
   shiftDraft: ShiftDraft; setShiftFld: SetShiftFld; editingShiftId: number | null;
@@ -122,7 +122,7 @@ export function StatsScreen({
         </FormCard>
       </div>
 
-      <BottomNav color={HOME_COLOR.p} light={HOME_COLOR.l} fabShadow={HOME_COLOR.fab} navTab={navTab} setNavTab={setNavTab} isSave={false} onFAB={onNewCall} onExport={onExport} onActivity={onHome} onSettings={onSettings} />
+      <BottomNav color={HOME_COLOR.p} light={HOME_COLOR.l} fabShadow={HOME_COLOR.fab} navTab={navTab} setNavTab={setNavTab} isSave={false} onFAB={onNewCall} onMap={onMap} onActivity={onHome} onSettings={onSettings} />
     </PhoneShell>
   );
 }

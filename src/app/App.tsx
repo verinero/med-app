@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from "react";
-import { db, recordsToCSV, downloadCSV, medsSummary, interventionsSummary, csvToRecords, presetsToCSV, parsePresetsCSV, getSettingValue, setSettingValue, type CallRecord, type Shift, type Hospital, type Medication, type InterventionDef, type ChiefComplaint, type ParsedPresets } from "../db";
-import { HOME_COLOR, TH, T_CHIPS, M_CHIPS, HOSPITALS, DEFAULT_MEDS, DEFAULT_INTERVENTIONS, DEFAULT_THEME, HEX_COLOR_RE, deriveThemeColors, type Screen } from "./constants";
+import { db, recordsToCSV, downloadCSV, medsSummary, interventionsSummary, csvToRecords, presetsToCSV, parsePresetsCSV, locationsToCSV, getSettingValue, setSettingValue, type CallRecord, type Shift, type Hospital, type Medication, type InterventionDef, type ChiefComplaint, type ParsedPresets, type Location, type LocationCategory } from "../db";
+import { HOME_COLOR, TH, T_CHIPS, M_CHIPS, HOSPITALS, DEFAULT_MEDS, DEFAULT_INTERVENTIONS, DEFAULT_LOCATION_CATEGORIES, STATION_CATEGORY, STATION_LOCATION, DEFAULT_THEME, HEX_COLOR_RE, deriveThemeColors, type Screen } from "./constants";
 import { blankForm, callToForm, dateStr, dateStrFor, sevenDaysAgo, gcsTotal, type CallForm } from "./callForm";
 import { blankShiftDraft, toDatetimeLocalValue, fromDatetimeLocalValue, type ShiftDraft } from "./shiftForm";
 import { callOutcomeSegments, hospitalCounts, ivSuccessStats, techedByUnitType as computeTechedByUnitType, acuitySegments } from "./callStats";
 import { shiftSummaries, shiftsByUnitType as computeShiftsByUnitType, hoursByUnitType as computeHoursByUnitType } from "./shiftStats";
 import { formatDuration } from "./shiftStats";
 import { ExportScreen } from "./screens/ExportScreen";
+import { MapScreen } from "./screens/MapScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { NewCallScreen } from "./screens/NewCallScreen";
 import { StatsScreen } from "./screens/StatsScreen";
@@ -22,6 +23,13 @@ function medicationUsageCount(name: string, calls: CallRecord[]): number {
 
 function complaintUsageCount(name: string, calls: CallRecord[]): number {
   return calls.filter(c => c.complaint === name).length;
+}
+
+// Unlike the other preset usage-count helpers, this counts against saved
+// map pins (locations), not call records — location categories aren't
+// referenced from CallRecord at all.
+function locationCategoryUsageCount(name: string, locations: Location[]): number {
+  return locations.filter(l => l.category === name).length;
 }
 
 interface RemovedItem { name: string; usageCount?: number }
@@ -46,6 +54,7 @@ function diffByName<T extends { name: string }>(current: { name: string }[], inc
 // ══════════════════════════════════════════════════════════════
 export default function App() {
   const [screen,    setScreen]    = useState<Screen>("home");
+  const [exportReturnScreen, setExportReturnScreen] = useState<Screen>("settings");
   const [navTab,    setNavTab]    = useState("activity");
 
   const [deleteTarget,      setDeleteTarget]      = useState<number | null>(null);
@@ -84,6 +93,10 @@ export default function App() {
   const [deleteInterventionTarget, setDeleteInterventionTarget] = useState<number | null>(null);
   const [chiefComplaints, setChiefComplaints] = useState<ChiefComplaint[]>([]);
   const [deleteComplaintTarget, setDeleteComplaintTarget] = useState<number | null>(null);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [deleteLocationTarget, setDeleteLocationTarget] = useState<number | null>(null);
+  const [locationCategories, setLocationCategories] = useState<LocationCategory[]>([]);
+  const [deleteLocationCategoryTarget, setDeleteLocationCategoryTarget] = useState<number | null>(null);
 
   const [importFileName, setImportFileName] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<{ calls: (Omit<CallRecord, "id"> & { shiftStartKey?: string })[]; shifts: Omit<Shift, "id">[] } | null>(null);
@@ -165,6 +178,39 @@ export default function App() {
         complaintRows = complaintRows.filter(r => r.id == null || !dupComplaintIds.includes(r.id));
       }
       setChiefComplaints(complaintRows);
+
+      let locationCategoryRows = await db.locationCategories.toArray();
+      if (locationCategoryRows.length === 0) {
+        try {
+          await db.locationCategories.bulkAdd([...DEFAULT_LOCATION_CATEGORIES.map(name => ({ name })), STATION_CATEGORY]);
+        } catch {
+          // StrictMode double-invokes this effect in dev, racing two
+          // "table is empty" checks before either bulkAdd lands — the
+          // losing call hits the unique `name` index and throws; the
+          // winning one already seeded the table, so this is safe to
+          // ignore (same race interventions/chiefComplaints self-heal
+          // against above, just headed off before it can insert dupes
+          // instead of cleaned up after).
+        }
+        locationCategoryRows = await db.locationCategories.toArray();
+      }
+      setLocationCategories(locationCategoryRows);
+
+      // Locations otherwise have no seed data (they're the crew's own
+      // personal spots) except this one preset — the unit's station,
+      // seeded once. Matched by name+category rather than "table empty"
+      // since the crew's own pins shouldn't block this from being added.
+      let locationRows = await db.locations.toArray();
+      const hasStation = locationRows.some(l => l.name === STATION_LOCATION.name && l.category === STATION_LOCATION.category);
+      if (!hasStation) {
+        try {
+          await db.locations.add(STATION_LOCATION);
+        } catch {
+          // same StrictMode double-invoke race as above
+        }
+        locationRows = await db.locations.toArray();
+      }
+      setLocations(locationRows);
 
       const [homeHex, traumaHex, medicalHex] = await Promise.all([
         getSettingValue("theme_home"), getSettingValue("theme_trauma"), getSettingValue("theme_medical"),
@@ -254,8 +300,17 @@ export default function App() {
     return eligible[0]?.id;
   }
 
-  function goExport() {
-    setNavTab("export");
+  function goMap() {
+    setNavTab("map");
+    setScreen("map");
+  }
+
+  // Export is no longer a primary bottom-nav tab — it's opened from a button
+  // inside Settings (or the Home dashboard's "Export" shortcut), so navTab
+  // is left as whatever it already was. Remember which screen opened it so
+  // the back button returns to the right place either way.
+  function openExport() {
+    setExportReturnScreen(screen);
     setScreen("export");
   }
 
@@ -762,6 +817,78 @@ export default function App() {
     ? `This complaint is used on ${deleteComplaintUsageCount} saved call${deleteComplaintUsageCount === 1 ? "" : "s"}. Deleting it won't change those records, but it will no longer be selectable for future calls.`
     : undefined;
 
+  // ── Map pins (Map screen only — no Settings management list) ──
+  // Unlike Hospitals/Medications, no dedupe-by-name: multiple pins can
+  // legitimately share a name (e.g. two different locations of a chain).
+  async function addLocation(loc: { name: string; category: string; lat: number; lng: number; address?: string; note?: string }) {
+    await db.locations.add(loc);
+    setLocations(await db.locations.toArray());
+  }
+
+  // Backfills a pin's address after the fact — e.g. a reverse-geocode
+  // lookup that failed at save time (offline) resolving on a later visit.
+  async function setLocationAddress(id: number, address: string) {
+    await db.locations.update(id, { address });
+    setLocations(await db.locations.toArray());
+  }
+
+  function requestDeleteLocation(id: number) {
+    setDeleteLocationTarget(id);
+  }
+
+  function cancelDeleteLocation() {
+    setDeleteLocationTarget(null);
+  }
+
+  async function confirmDeleteLocation() {
+    if (deleteLocationTarget == null) return;
+    await db.locations.delete(deleteLocationTarget);
+    setLocations(await db.locations.toArray());
+    setDeleteLocationTarget(null);
+  }
+
+  // ── Location Categories (Settings) ─────────────────────────
+  async function addLocationCategory(name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (locationCategories.some(cat => cat.name.toLowerCase() === trimmed.toLowerCase())) return;
+    await db.locationCategories.add({ name: trimmed });
+    setLocationCategories(await db.locationCategories.toArray());
+  }
+
+  async function setLocationCategoryColor(id: number, color: string) {
+    await db.locationCategories.update(id, { color });
+    setLocationCategories(await db.locationCategories.toArray());
+  }
+
+  function requestDeleteLocationCategory(id: number) {
+    setDeleteLocationCategoryTarget(id);
+  }
+
+  function cancelDeleteLocationCategory() {
+    setDeleteLocationCategoryTarget(null);
+  }
+
+  async function confirmDeleteLocationCategory() {
+    if (deleteLocationCategoryTarget == null) return;
+    await db.locationCategories.delete(deleteLocationCategoryTarget);
+    setLocationCategories(await db.locationCategories.toArray());
+    setDeleteLocationCategoryTarget(null);
+    // Deliberately does NOT touch db.locations — pins keep their category
+    // as a plain string, same as CallRecord.hospital surviving a deleted
+    // Hospital.
+  }
+
+  const deleteLocationCategoryName = deleteLocationCategoryTarget != null
+    ? locationCategories.find(cat => cat.id === deleteLocationCategoryTarget)?.name
+    : undefined;
+  const deleteLocationCategoryUsageCount = deleteLocationCategoryName
+    ? locationCategoryUsageCount(deleteLocationCategoryName, locations)
+    : 0;
+  const deleteLocationCategoryMessage = deleteLocationCategoryUsageCount > 0
+    ? `This category is used on ${deleteLocationCategoryUsageCount} saved location${deleteLocationCategoryUsageCount === 1 ? "" : "s"}. Deleting it won't change those pins, but it will no longer be selectable for new locations.`
+    : undefined;
+
   // ── Theme colors (Settings) ────────────────────────────────
   // HOME_COLOR/TH are mutated in place rather than threaded through a
   // context — every screen imports them as module-level singletons, so
@@ -801,6 +928,7 @@ export default function App() {
     await Promise.all([
       db.calls.clear(), db.shifts.clear(), db.settings.clear(),
       db.hospitals.clear(), db.medications.clear(), db.interventions.clear(), db.chiefComplaints.clear(),
+      db.locations.clear(), db.locationCategories.clear(),
     ]);
     await Promise.all([
       db.hospitals.bulkAdd(HOSPITALS.map(name => ({ name }))),
@@ -810,7 +938,9 @@ export default function App() {
         ...T_CHIPS.map(name => ({ name, mode: "trauma" as const })),
         ...M_CHIPS.map(name => ({ name, mode: "medical" as const })),
       ]),
+      db.locationCategories.bulkAdd([...DEFAULT_LOCATION_CATEGORIES.map(name => ({ name })), STATION_CATEGORY]),
     ]);
+    await db.locations.add(STATION_LOCATION);
     setSavedCalls([]);
     setAllCalls([]);
     setShifts([]);
@@ -818,6 +948,8 @@ export default function App() {
     setMedications(await db.medications.toArray());
     setInterventionDefs(await db.interventions.toArray());
     setChiefComplaints(await db.chiefComplaints.toArray());
+    setLocations(await db.locations.toArray());
+    setLocationCategories(await db.locationCategories.toArray());
     setDeleteTarget(null);
     setDeleteShiftTarget(null);
     setEditingCallId(null);
@@ -839,6 +971,11 @@ export default function App() {
       db.shifts.toArray(),
     ]);
     downloadCSV(recordsToCSV(all, allShifts), `ems-calls-${today.replace(/ /g, "-")}.csv`);
+  }
+
+  async function exportLocations() {
+    const all = await db.locations.toArray();
+    downloadCSV(locationsToCSV(all), `ems-locations-${today.replace(/ /g, "-")}.csv`);
   }
 
   async function exportPDF() {
@@ -881,7 +1018,30 @@ export default function App() {
   }
 
   // ══════════════════════════════════════════════════════════
-  // EXPORT SCREEN
+  // MAP SCREEN
+  // ══════════════════════════════════════════════════════════
+  if (screen === "map") {
+    return (
+      <MapScreen
+        locations={locations}
+        locationCategories={locationCategories}
+        navTab={navTab}
+        setNavTab={setNavTab}
+        onHome={() => setScreen("home")}
+        onStats={() => setScreen("stats")}
+        onSettings={() => setScreen("settings")}
+        onAddLocation={addLocation}
+        onSetLocationAddress={setLocationAddress}
+        deleteLocationTarget={deleteLocationTarget}
+        onRequestDeleteLocation={requestDeleteLocation}
+        onCancelDeleteLocation={cancelDeleteLocation}
+        onConfirmDeleteLocation={confirmDeleteLocation}
+      />
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // EXPORT SCREEN (opened from a button in Settings, not a bottom-nav tab)
   // ══════════════════════════════════════════════════════════
   if (screen === "export") {
     return (
@@ -893,10 +1053,13 @@ export default function App() {
         onHome={() => setScreen("home")}
         onNewCall={startNewCall}
         onStats={() => setScreen("stats")}
+        onMap={goMap}
         onSettings={() => setScreen("settings")}
+        onBack={() => setScreen(exportReturnScreen)}
         onExportCSV={exportCSV}
         onExportPDF={exportPDF}
         onExportPresets={exportPresets}
+        onExportLocations={exportLocations}
       />
     );
   }
@@ -920,7 +1083,7 @@ export default function App() {
         navTab={navTab}
         setNavTab={setNavTab}
         onHome={() => setScreen("home")}
-        onExport={goExport}
+        onMap={goMap}
         onNewCall={startNewCall}
         onSettings={() => setScreen("settings")}
         pillUnitLabel={pillUnitLabel}
@@ -955,7 +1118,8 @@ export default function App() {
         today={today}
         onHome={() => setScreen("home")}
         onStats={() => setScreen("stats")}
-        onExport={goExport}
+        onMap={goMap}
+        onOpenExport={openExport}
         themeHex={themeHex}
         onSetThemeColor={setThemeColor}
         onResetThemeColors={resetThemeColors}
@@ -995,6 +1159,15 @@ export default function App() {
         onRequestDeleteComplaint={requestDeleteComplaint}
         onCancelDeleteComplaint={cancelDeleteComplaint}
         onConfirmDeleteComplaint={confirmDeleteComplaint}
+        locations={locations}
+        locationCategories={locationCategories}
+        onAddLocationCategory={addLocationCategory}
+        onSetLocationCategoryColor={setLocationCategoryColor}
+        deleteLocationCategoryTarget={deleteLocationCategoryTarget}
+        deleteLocationCategoryMessage={deleteLocationCategoryMessage}
+        onRequestDeleteLocationCategory={requestDeleteLocationCategory}
+        onCancelDeleteLocationCategory={cancelDeleteLocationCategory}
+        onConfirmDeleteLocationCategory={confirmDeleteLocationCategory}
         importFileName={importFileName}
         importPreview={importPreview}
         importErrors={importErrors}
@@ -1030,7 +1203,8 @@ export default function App() {
         onSetDeleteTarget={setDeleteTarget}
         onConfirmDelete={confirmDelete}
         onOpenCall={openEditCall}
-        onExport={goExport}
+        onMap={goMap}
+        onOpenExport={openExport}
         onNewCall={startNewCall}
         onStats={() => setScreen("stats")}
         onSettings={() => setScreen("settings")}
@@ -1082,7 +1256,7 @@ export default function App() {
       onCancelNoShiftWarning={cancelNoShiftWarning}
       onLogAnyway={confirmSaveWithoutShift}
       onSave={() => attemptSave(isLocked)}
-      onExport={goExport}
+      onMap={goMap}
       onToggleLock={() => setIsLocked(prev => !prev)}
       onTryCancel={tryCancel}
       pillUnitLabel={pillUnitLabel}

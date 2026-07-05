@@ -29,7 +29,7 @@ export function NewCallScreen({
   navTab, setNavTab,
   showCancelWarning, onKeepEditing, onDiscard,
   showNoShiftWarning, onCancelNoShiftWarning, onLogAnyway,
-  onSave, onExport, onToggleLock, onTryCancel,
+  onSave, onMap, onToggleLock, onTryCancel,
   pillUnitLabel, pillElapsedLabel,
   showShiftManager, shiftManagerTab, setShiftManagerTab, shiftDraft, setShiftFld, editingShiftId,
   shiftHistory, onOpenShiftManager, onCloseShiftManager, onSaveShift, onNewShiftInManager, onSelectHistoryShift,
@@ -41,7 +41,7 @@ export function NewCallScreen({
   navTab: string; setNavTab: (t: string) => void;
   showCancelWarning: boolean; onKeepEditing: () => void; onDiscard: () => void;
   showNoShiftWarning: boolean; onCancelNoShiftWarning: () => void; onLogAnyway: () => void;
-  onSave: () => void; onExport: () => void; onToggleLock: () => void; onTryCancel: () => void;
+  onSave: () => void; onMap: () => void; onToggleLock: () => void; onTryCancel: () => void;
   pillUnitLabel: string | null; pillElapsedLabel?: string;
   showShiftManager: boolean; shiftManagerTab: "add" | "history"; setShiftManagerTab: (t: "add" | "history") => void;
   shiftDraft: ShiftDraft; setShiftFld: SetShiftFld; editingShiftId: number | null;
@@ -166,7 +166,7 @@ export function NewCallScreen({
 
       <BottomNav color={c.p} light={c.l} fabShadow={c.fab} navTab={navTab} setNavTab={setNavTab} isSave={true}
         onFAB={onSave}
-        onExport={onExport}
+        onMap={onMap}
         onLock={onToggleLock}
         onCancel={onTryCancel}
         isLocked={isLocked}
