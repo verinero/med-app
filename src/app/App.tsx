@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { db, recordsToCSV, downloadCSV, medsSummary, interventionsSummary, csvToRecords, presetsToCSV, parsePresetsCSV, locationsToCSV, getSettingValue, setSettingValue, type CallRecord, type Shift, type Hospital, type Medication, type InterventionDef, type ChiefComplaint, type ParsedPresets, type Location, type LocationCategory } from "../db";
-import { HOME_COLOR, TH, T_CHIPS, M_CHIPS, HOSPITALS, DEFAULT_MEDS, DEFAULT_INTERVENTIONS, DEFAULT_LOCATION_CATEGORIES, STATION_CATEGORY, STATION_LOCATION, DEFAULT_THEME, HEX_COLOR_RE, deriveThemeColors, type Screen } from "./constants";
+import { HOME_COLOR, TH, T_CHIPS, M_CHIPS, HOSPITALS, DEFAULT_MEDS, DEFAULT_INTERVENTIONS, DEFAULT_LOCATION_CATEGORIES, STATION_CATEGORY, STATION_LOCATION, HOSPITAL_CATEGORY, DEFAULT_MAP_CENTER, DEFAULT_THEME, HEX_COLOR_RE, deriveThemeColors, type Screen } from "./constants";
+import { forwardGeocode } from "./geocoding";
 import { blankForm, callToForm, dateStr, dateStrFor, sevenDaysAgo, gcsTotal, type CallForm } from "./callForm";
 import { blankShiftDraft, toDatetimeLocalValue, fromDatetimeLocalValue, type ShiftDraft } from "./shiftForm";
 import { callOutcomeSegments, hospitalCounts, ivSuccessStats, techedByUnitType as computeTechedByUnitType, acuitySegments } from "./callStats";
@@ -97,6 +98,14 @@ export default function App() {
   const [deleteLocationTarget, setDeleteLocationTarget] = useState<number | null>(null);
   const [locationCategories, setLocationCategories] = useState<LocationCategory[]>([]);
   const [deleteLocationCategoryTarget, setDeleteLocationCategoryTarget] = useState<number | null>(null);
+  // A hospital whose name couldn't be auto-geocoded into a Hospitals-category
+  // pin stays unresolved (shown as a red warning + "Add Location" button on
+  // its row in Manage Hospitals) until the user explicitly opens this
+  // address-entry prompt for it — no automatic popup, user-initiated only.
+  const [activeHospitalPrompt, setActiveHospitalPrompt] = useState<string | null>(null);
+  const [hospitalAddressDraft, setHospitalAddressDraft] = useState("");
+  const [hospitalAddressError, setHospitalAddressError] = useState<string | null>(null);
+  const hospitalSyncAttempted = useRef<Set<string>>(new Set());
 
   const [importFileName, setImportFileName] = useState<string | null>(null);
   const [importPreview, setImportPreview] = useState<{ calls: (Omit<CallRecord, "id"> & { shiftStartKey?: string })[]; shifts: Omit<Shift, "id">[] } | null>(null);
@@ -182,7 +191,7 @@ export default function App() {
       let locationCategoryRows = await db.locationCategories.toArray();
       if (locationCategoryRows.length === 0) {
         try {
-          await db.locationCategories.bulkAdd([...DEFAULT_LOCATION_CATEGORIES.map(name => ({ name })), STATION_CATEGORY]);
+          await db.locationCategories.bulkAdd(DEFAULT_LOCATION_CATEGORIES.map(name => ({ name })));
         } catch {
           // StrictMode double-invokes this effect in dev, racing two
           // "table is empty" checks before either bulkAdd lands — the
@@ -194,6 +203,20 @@ export default function App() {
         }
         locationCategoryRows = await db.locationCategories.toArray();
       }
+      // Station/Hospitals are checked for individually (by name), not
+      // gated behind "table is empty", so they backfill onto an install
+      // that already had other categories before these were introduced —
+      // the "table is empty" seed above only ever fires once, on a
+      // brand-new install, so it can't be relied on for this.
+      for (const preset of [STATION_CATEGORY, HOSPITAL_CATEGORY]) {
+        if (locationCategoryRows.some(c => c.name === preset.name)) continue;
+        try {
+          await db.locationCategories.add(preset);
+        } catch {
+          // same StrictMode double-invoke race as above
+        }
+      }
+      locationCategoryRows = await db.locationCategories.toArray();
       setLocationCategories(locationCategoryRows);
 
       // Locations otherwise have no seed data (they're the crew's own
@@ -232,6 +255,93 @@ export default function App() {
     const id = setInterval(() => setNow(Date.now()), 60000);
     return () => clearInterval(id);
   }, []);
+
+  // Hospitals are expected to be in Georgia — a geocode result outside GA
+  // is treated exactly like "no match" rather than accepted as-is. This is
+  // a real safety net, not a formality: a bare name with no strong local
+  // match can otherwise resolve to a same-named place far away (confirmed
+  // against the real API — "Southern Regional hospital" unbounded once
+  // matched one in Belize) even with the hard-bounded search box below.
+  function isGeorgiaResult(result: { stateCode?: string } | undefined): boolean {
+    return result?.stateCode === "GA";
+  }
+
+  // Keeps the locked "Hospitals" map category in sync with the Hospitals
+  // preset list: any hospital not yet represented by a pin gets one added
+  // automatically, geocoded from its name. A hospital whose name can't be
+  // confidently (and correctly — see isGeorgiaResult) geocoded stays
+  // unresolved — no automatic popup, it just shows a warning + "Add
+  // Location" button on its row in Manage Hospitals (SettingsScreen.tsx)
+  // until the user opens the address prompt for it themselves. Deleting a
+  // hospital never removes its pin — same "deleting a preset never mutates
+  // existing data" rule as everywhere else (Hospitals/Medications/
+  // Interventions/Chief Complaints).
+  useEffect(() => {
+    if (!locationCategories.some(cat => cat.name === HOSPITAL_CATEGORY.name)) return;
+    async function syncHospitalPins() {
+      // Queried fresh from Dexie (not the `locations` state) so this effect
+      // only needs to depend on [hospitals, locationCategories] — it both
+      // reads and writes locations, so depending on that state directly
+      // would re-trigger itself on every pin it adds.
+      for (const h of hospitals) {
+        if (hospitalSyncAttempted.current.has(h.name)) continue;
+        const current = await db.locations.toArray();
+        if (current.some(l => l.category === HOSPITAL_CATEGORY.name && l.name === h.name)) continue;
+        hospitalSyncAttempted.current.add(h.name);
+        const result = await forwardGeocode(`${h.name} hospital`, [DEFAULT_MAP_CENTER.lat, DEFAULT_MAP_CENTER.lng]);
+        if (result && isGeorgiaResult(result)) {
+          const maxOrder = Math.max(-1, ...current.filter(l => l.category === HOSPITAL_CATEGORY.name).map(l => l.order ?? -1));
+          await db.locations.add({ name: h.name, category: HOSPITAL_CATEGORY.name, lat: result.lat, lng: result.lng, address: result.address, order: maxOrder + 1 });
+          setLocations(await db.locations.toArray());
+        }
+        // No match, or a match outside Georgia: leave unresolved. Nothing
+        // to undo — no pin was ever added — the hospital just stays
+        // flagged in Manage Hospitals until the user adds an address.
+      }
+    }
+    syncHospitalPins();
+  }, [hospitals, locationCategories]);
+
+  function openHospitalAddressPrompt(name: string) {
+    setActiveHospitalPrompt(name);
+    setHospitalAddressDraft("");
+    setHospitalAddressError(null);
+  }
+
+  async function confirmHospitalAddress() {
+    const name = activeHospitalPrompt;
+    const query = hospitalAddressDraft.trim();
+    if (!name || !query) return;
+    const result = await forwardGeocode(query, [DEFAULT_MAP_CENTER.lat, DEFAULT_MAP_CENTER.lng]);
+    if (!result) {
+      setHospitalAddressError("Couldn't find that address — try adding more detail (city, state).");
+      return;
+    }
+    if (!isGeorgiaResult(result)) {
+      setHospitalAddressError("That address doesn't appear to be in Georgia — please check it.");
+      return;
+    }
+    const maxOrder = Math.max(-1, ...locations.filter(l => l.category === HOSPITAL_CATEGORY.name).map(l => l.order ?? -1));
+    await db.locations.add({ name, category: HOSPITAL_CATEGORY.name, lat: result.lat, lng: result.lng, address: result.address, order: maxOrder + 1 });
+    setLocations(await db.locations.toArray());
+    setHospitalAddressDraft("");
+    setHospitalAddressError(null);
+    setActiveHospitalPrompt(null);
+  }
+
+  function cancelHospitalAddressPrompt() {
+    setHospitalAddressDraft("");
+    setHospitalAddressError(null);
+    setActiveHospitalPrompt(null);
+  }
+
+  // Hospitals with no matching pin in the locked Hospitals map category yet
+  // — surfaced as a warning + "Add Location" button on each row in Manage
+  // Hospitals (SettingsScreen.tsx) rather than an automatic popup.
+  const unresolvedHospitalNames = useMemo(() =>
+    hospitals.filter(h => !locations.some(l => l.category === HOSPITAL_CATEGORY.name && l.name === h.name)).map(h => h.name),
+    [hospitals, locations]
+  );
 
   // unique past complaints for autocomplete
   const pastComplaints = useMemo(() =>
@@ -821,7 +931,8 @@ export default function App() {
   // Unlike Hospitals/Medications, no dedupe-by-name: multiple pins can
   // legitimately share a name (e.g. two different locations of a chain).
   async function addLocation(loc: { name: string; category: string; lat: number; lng: number; address?: string; note?: string }) {
-    await db.locations.add(loc);
+    const maxOrder = Math.max(-1, ...locations.filter(l => l.category === loc.category).map(l => l.order ?? -1));
+    await db.locations.add({ ...loc, order: maxOrder + 1 });
     setLocations(await db.locations.toArray());
   }
 
@@ -829,6 +940,27 @@ export default function App() {
   // lookup that failed at save time (offline) resolving on a later visit.
   async function setLocationAddress(id: number, address: string) {
     await db.locations.update(id, { address });
+    setLocations(await db.locations.toArray());
+  }
+
+  // Swaps `order` with the adjacent sibling within the same category —
+  // same swap-with-adjacent pattern as moveIntervention. Legacy pins (or
+  // ones that have never been reordered) may not have an explicit `order`
+  // yet, so the whole category's siblings are normalized to sequential
+  // indices first, then the requested pair is swapped.
+  async function moveLocation(id: number, direction: "up" | "down") {
+    const loc = locations.find(l => l.id === id);
+    if (!loc) return;
+    const siblings = [...locations.filter(l => l.category === loc.category)]
+      .sort((a, b) => (a.order ?? a.id ?? 0) - (b.order ?? b.id ?? 0));
+    const idx = siblings.findIndex(l => l.id === id);
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= siblings.length) return;
+    await Promise.all(siblings.map((s, i) => db.locations.update(s.id!, { order: i })));
+    await Promise.all([
+      db.locations.update(id, { order: swapIdx }),
+      db.locations.update(siblings[swapIdx].id!, { order: idx }),
+    ]);
     setLocations(await db.locations.toArray());
   }
 
@@ -861,7 +993,15 @@ export default function App() {
     setLocationCategories(await db.locationCategories.toArray());
   }
 
+  async function toggleLocationCategoryOrderLock(id: number) {
+    const cat = locationCategories.find(c => c.id === id);
+    if (!cat) return;
+    await db.locationCategories.update(id, { orderLocked: !cat.orderLocked });
+    setLocationCategories(await db.locationCategories.toArray());
+  }
+
   function requestDeleteLocationCategory(id: number) {
+    if (locationCategories.find(cat => cat.id === id)?.locked) return;
     setDeleteLocationCategoryTarget(id);
   }
 
@@ -938,9 +1078,11 @@ export default function App() {
         ...T_CHIPS.map(name => ({ name, mode: "trauma" as const })),
         ...M_CHIPS.map(name => ({ name, mode: "medical" as const })),
       ]),
-      db.locationCategories.bulkAdd([...DEFAULT_LOCATION_CATEGORIES.map(name => ({ name })), STATION_CATEGORY]),
+      db.locationCategories.bulkAdd([...DEFAULT_LOCATION_CATEGORIES.map(name => ({ name })), STATION_CATEGORY, HOSPITAL_CATEGORY]),
     ]);
     await db.locations.add(STATION_LOCATION);
+    hospitalSyncAttempted.current.clear();
+    setActiveHospitalPrompt(null);
     setSavedCalls([]);
     setAllCalls([]);
     setShifts([]);
@@ -1032,6 +1174,8 @@ export default function App() {
         onSettings={() => setScreen("settings")}
         onAddLocation={addLocation}
         onSetLocationAddress={setLocationAddress}
+        onMoveLocation={moveLocation}
+        onToggleLocationCategoryOrderLock={toggleLocationCategoryOrderLock}
         deleteLocationTarget={deleteLocationTarget}
         onRequestDeleteLocation={requestDeleteLocation}
         onCancelDeleteLocation={cancelDeleteLocation}
@@ -1168,6 +1312,14 @@ export default function App() {
         onRequestDeleteLocationCategory={requestDeleteLocationCategory}
         onCancelDeleteLocationCategory={cancelDeleteLocationCategory}
         onConfirmDeleteLocationCategory={confirmDeleteLocationCategory}
+        unresolvedHospitalNames={unresolvedHospitalNames}
+        activeHospitalPrompt={activeHospitalPrompt}
+        hospitalAddressDraft={hospitalAddressDraft}
+        hospitalAddressError={hospitalAddressError}
+        onOpenHospitalAddressPrompt={openHospitalAddressPrompt}
+        onHospitalAddressDraftChange={setHospitalAddressDraft}
+        onConfirmHospitalAddress={confirmHospitalAddress}
+        onCancelHospitalAddressPrompt={cancelHospitalAddressPrompt}
         importFileName={importFileName}
         importPreview={importPreview}
         importErrors={importErrors}

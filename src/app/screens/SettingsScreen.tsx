@@ -10,12 +10,17 @@ import { FormCard } from "../components/FormCard";
 import { CardHead } from "../components/CardHead";
 import { BottomNav } from "../components/BottomNav";
 import { DeleteModal } from "../components/DeleteModal";
-import { eyebrow, textInputStyle, primaryBtn } from "../styles";
+import { DragSheet } from "../components/DragSheet";
+import { eyebrow, textInputStyle, primaryBtn, sheetTitle } from "../styles";
 
-function ManageListCard({ label, items, placeholder, onAdd, onRequestDelete, onSetDefaultRoute }: {
+function ManageListCard({ label, items, placeholder, onAdd, onRequestDelete, onSetDefaultRoute, unresolvedNames, onRequestAddLocation }: {
   label: string; items: { id?: number; name: string; defaultRoute?: string }[]; placeholder: string;
   onAdd: (name: string) => void; onRequestDelete: (id: number) => void;
   onSetDefaultRoute?: (id: number, route: string) => void;
+  // Hospitals-only: names with no matching map pin yet get a red warning +
+  // "Add Location" button on their row instead of an automatic popup.
+  unresolvedNames?: string[];
+  onRequestAddLocation?: (name: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
@@ -70,6 +75,14 @@ function ManageListCard({ label, items, placeholder, onAdd, onRequestDelete, onS
                             }}>{r}</button>
                           ))}
                         </div>
+                      </div>
+                    )}
+                    {unresolvedNames?.includes(item.name) && (
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "#D32F2F" }}>⚠ No map location</span>
+                        <button onClick={() => onRequestAddLocation?.(item.name)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 11, fontWeight: 700, color: HOME_COLOR.p }}>
+                          Add Location
+                        </button>
                       </div>
                     )}
                   </div>
@@ -247,9 +260,16 @@ function ManageLocationCategoriesCard({ items, locations, onAdd, onSetColor, onR
                         <span style={{ fontSize: 13, fontWeight: 600, color: "#0d1117" }}>{item.name}</span>
                         {pinCount > 0 && <span style={{ fontSize: 11, color: "#9ca3af" }}>({pinCount} pin{pinCount === 1 ? "" : "s"})</span>}
                       </div>
-                      <button onClick={() => item.id != null && onRequestDelete(item.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", display: "flex", flexShrink: 0 }}>
-                        <Trash2 size={14} color="#D1D5DB" />
-                      </button>
+                      {item.locked ? (
+                        <div title="This category can't be deleted" style={{ display: "flex", alignItems: "center", gap: 4, color: "#9ca3af", flexShrink: 0 }}>
+                          <Lock size={12} />
+                          <span style={{ fontSize: 10, fontWeight: 700 }}>Locked</span>
+                        </div>
+                      ) : (
+                        <button onClick={() => item.id != null && onRequestDelete(item.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px", display: "flex", flexShrink: 0 }}>
+                          <Trash2 size={14} color="#D1D5DB" />
+                        </button>
+                      )}
                     </div>
                     {wheelForId === item.id && (
                       <ColorWheel value={color} onPick={hex => item.id != null && onSetColor(item.id, hex)} />
@@ -633,6 +653,8 @@ export function SettingsScreen({
   locations, locationCategories, onAddLocationCategory, onSetLocationCategoryColor,
   deleteLocationCategoryTarget, deleteLocationCategoryMessage,
   onRequestDeleteLocationCategory, onCancelDeleteLocationCategory, onConfirmDeleteLocationCategory,
+  unresolvedHospitalNames, activeHospitalPrompt, hospitalAddressDraft, hospitalAddressError,
+  onOpenHospitalAddressPrompt, onHospitalAddressDraftChange, onConfirmHospitalAddress, onCancelHospitalAddressPrompt,
   themeHex, onSetThemeColor, onResetThemeColors,
   importFileName, importPreview, importErrors, importLog,
   onImportFileSelected, onConfirmImport, onCancelImport,
@@ -660,6 +682,9 @@ export function SettingsScreen({
   onAddLocationCategory: (name: string) => void; onSetLocationCategoryColor: (id: number, color: string) => void;
   deleteLocationCategoryTarget: number | null; deleteLocationCategoryMessage?: string;
   onRequestDeleteLocationCategory: (id: number) => void; onCancelDeleteLocationCategory: () => void; onConfirmDeleteLocationCategory: () => void;
+  unresolvedHospitalNames: string[]; activeHospitalPrompt: string | null; hospitalAddressDraft: string; hospitalAddressError: string | null;
+  onOpenHospitalAddressPrompt: (name: string) => void; onHospitalAddressDraftChange: (v: string) => void;
+  onConfirmHospitalAddress: () => void; onCancelHospitalAddressPrompt: () => void;
   themeHex: { home: string; trauma: string; medical: string };
   onSetThemeColor: (theme: "home" | "trauma" | "medical", hex: string) => void; onResetThemeColors: () => void;
   importFileName: string | null;
@@ -715,6 +740,25 @@ export function SettingsScreen({
         onCancel={onCancelDeleteLocationCategory}
         onConfirm={onConfirmDeleteLocationCategory}
       />
+      <DragSheet show={activeHospitalPrompt != null} onClose={onCancelHospitalAddressPrompt}>
+        <h3 style={sheetTitle}>Address needed</h3>
+        <p style={{ fontSize: 14, color: "#6b7280", margin: "0 0 16px" }}>
+          Couldn't automatically find a location for <strong>{activeHospitalPrompt}</strong>. Enter its address to add it to the map.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <input type="text" value={hospitalAddressDraft} onChange={e => onHospitalAddressDraftChange(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") onConfirmHospitalAddress(); }}
+            placeholder="Address" style={textInputStyle} />
+          {hospitalAddressError && <p style={{ fontSize: 12, color: "#D32F2F", margin: 0 }}>{hospitalAddressError}</p>}
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={onCancelHospitalAddressPrompt} style={{ flex: 1, padding: "14px 0", borderRadius: 14, border: "1.5px solid #E2E5EC", background: "#F8F9FC", fontSize: 15, fontWeight: 700, color: "#6b7280", cursor: "pointer" }}>Cancel</button>
+            <button onClick={onConfirmHospitalAddress} disabled={!hospitalAddressDraft.trim()} style={{
+              ...primaryBtn, flex: 1, width: "auto", background: HOME_COLOR.p,
+              opacity: hospitalAddressDraft.trim() ? 1 : 0.5, cursor: hospitalAddressDraft.trim() ? "pointer" : "default",
+            }}>Add to Map</button>
+          </div>
+        </div>
+      </DragSheet>
       <div style={{ background: HOME_COLOR.p, padding: "16px 20px 18px" }}>
         <div style={{ ...eyebrow, color: contrastTextColor(HOME_COLOR.p), opacity: 0.65 }}>Weewoo Tracker</div>
         <h1 style={{ margin: 0, color: contrastTextColor(HOME_COLOR.p), fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.1 }}>Settings</h1>
@@ -725,7 +769,8 @@ export function SettingsScreen({
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 16px 104px", scrollbarWidth: "none" }}>
         <SLabel>Hospitals</SLabel>
         <ManageListCard label="Manage Hospitals" items={hospitals} placeholder="e.g. Grady"
-          onAdd={onAddHospital} onRequestDelete={onRequestDeleteHospital} />
+          onAdd={onAddHospital} onRequestDelete={onRequestDeleteHospital}
+          unresolvedNames={unresolvedHospitalNames} onRequestAddLocation={onOpenHospitalAddressPrompt} />
 
         <SLabel>Medications</SLabel>
         <ManageListCard label="Manage Medications" items={medications} placeholder="e.g. Fentanyl"

@@ -84,6 +84,22 @@
     @apply bg-background text-foreground;
   }
 
+  /* The page itself must never scroll — only the app's own internal
+     `overflow-y: auto` content divs should. If html/body can scroll (even
+     by a stray pixel from overscroll bounce), mobile Safari's dynamic
+     toolbar hide/show kicks in mid-scroll and the fixed BottomNav can
+     visually disappear or jump during that transition. Locking the root
+     frame here means that never triggers, so the bottom bar stays put. */
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  #root {
+    height: 100%;
+  }
+
   html {
     font-size: var(--font-size);
   }

@@ -174,3 +174,10 @@ export const STATION_LOCATION = {
   lng: DEFAULT_MAP_CENTER.lng,
   address: "1380 Beverage Drive, Suite D, Stone Mountain, GA 30083",
 };
+
+// A locked category (can't be deleted from Settings) auto-populated from
+// the Hospitals preset list (App.tsx keeps db.hospitals and this category's
+// pins in sync — a new hospital gets a pin automatically, geocoded from its
+// name; deleting a hospital does NOT remove its pin, same "deleting a
+// preset never mutates historical data" rule as everywhere else in this app).
+export const HOSPITAL_CATEGORY = { name: "Hospitals", color: "#C62828", locked: true };

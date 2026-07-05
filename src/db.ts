@@ -122,6 +122,16 @@ export interface LocationCategory {
   id?: number;
   name: string;
   color?: string;
+  // When true, List view's reorder controls are disabled for this
+  // category's pins until unlocked again — same "lock in the order, guard
+  // against accidental changes" idea as Lock Chart on a call.
+  orderLocked?: boolean;
+  // When true, this category itself can't be deleted from Settings (e.g.
+  // "Hospitals", which is auto-populated from db.hospitals) — distinct from
+  // orderLocked, which only locks the pins' order, not the category's
+  // existence. Pins within a locked category can still be added/removed
+  // individually; only the category row's delete button is disabled.
+  locked?: boolean;
 }
 
 // A saved map pin. `category` is a plain string (not a foreign key) so
@@ -138,6 +148,9 @@ export interface Location {
   // falls back to showing raw coordinates for that row.
   address?: string;
   note?: string;
+  // Manual rank within this pin's category (List view reorder, numbered
+  // map markers) — mirrors InterventionDef.order scoped per mode.
+  order?: number;
 }
 
 class EMSDatabase extends Dexie {
@@ -203,6 +216,28 @@ class EMSDatabase extends Dexie {
       chiefComplaints: "++id, mode",
       locationCategories: "++id, &name",
       locations: "++id, category",
+    });
+    this.version(7).stores({
+      calls: "++id, timestamp, shiftId, mode, date",
+      shifts: "++id, startTime",
+      settings: "++id, key",
+      hospitals: "++id, &name",
+      medications: "++id, &name",
+      interventions: "++id, mode, order",
+      chiefComplaints: "++id, mode",
+      locationCategories: "++id, &name",
+      locations: "++id, category, order",
+    });
+    this.version(8).stores({
+      calls: "++id, timestamp, shiftId, mode, date",
+      shifts: "++id, startTime",
+      settings: "++id, key",
+      hospitals: "++id, &name",
+      medications: "++id, &name",
+      interventions: "++id, mode, order",
+      chiefComplaints: "++id, mode",
+      locationCategories: "++id, &name",
+      locations: "++id, category, order",
     });
   }
 }
@@ -387,8 +422,8 @@ export function presetsToCSV(hospitals: Hospital[], medications: Medication[], i
 // Interventions/Chief Complaints) — pins aren't part of that bulk config
 // backup, they get their own dedicated export button instead.
 export function locationsToCSV(locations: Location[]): string {
-  const headers = ["Name", "Category", "Lat", "Lng", "Address", "Note"];
-  const rows = locations.map(l => [l.name, l.category, String(l.lat), String(l.lng), l.address || "", l.note || ""]);
+  const headers = ["Name", "Category", "Lat", "Lng", "Address", "Note", "Order"];
+  const rows = locations.map(l => [l.name, l.category, String(l.lat), String(l.lng), l.address || "", l.note || "", l.order != null ? String(l.order) : ""]);
   return [headers, ...rows].map(r => r.map(f => `"${f.replace(/"/g, '""')}"`).join(",")).join("\n");
 }
 

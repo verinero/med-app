@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMapEvents } from "react-leaflet";
 import L, { type Map as LeafletMap } from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Search, LocateFixed, MapPin, Navigation, Trash2, X } from "lucide-react";
+import { Search, LocateFixed, MapPin, Navigation, Trash2, X, ArrowUpDown, ArrowUp, ArrowDown, Lock, LockOpen } from "lucide-react";
 import { HOME_COLOR, contrastTextColor, LOCATION_CATEGORY_PALETTE, DEFAULT_MAP_CENTER } from "../constants";
 import type { Location, LocationCategory } from "../../db";
 import { PhoneShell } from "../components/PhoneShell";
@@ -11,6 +11,7 @@ import { BottomNav } from "../components/BottomNav";
 import { DeleteModal } from "../components/DeleteModal";
 import { DragSheet } from "../components/DragSheet";
 import { eyebrow, textInputStyle, primaryBtn, sheetTitle } from "../styles";
+import { formatAddress, reverseGeocode, fetchWithTimeout, type NominatimResult } from "../geocoding";
 
 // Default marker PNGs 404 under Vite unless re-pointed at bundled assets —
 // standard Leaflet+bundler fix. Colored divIcons (below) are used instead
@@ -27,15 +28,41 @@ function categoryColor(name: string, categories: LocationCategory[]): string {
   return categories[idx].color || LOCATION_CATEGORY_PALETTE[idx % LOCATION_CATEGORY_PALETTE.length];
 }
 
-function pinIcon(color: string) {
+// `rank` (1-based position within the pin's category) renders inside the
+// bubble — the outer div is rotated -45deg to form the teardrop shape, so
+// the number needs a counter-rotation to read upright.
+function pinIcon(color: string, rank?: number) {
+  const size = rank != null ? 26 : 22;
   return L.divIcon({
     className: "",
-    html: `<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4)"></div>`,
-    iconSize: [22, 22],
-    iconAnchor: [11, 22],
-    popupAnchor: [0, -20],
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:${color};border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;">${rank != null ? `<span style="transform:rotate(45deg);color:#fff;font-size:11px;font-weight:800;font-family:'Inter',sans-serif;">${rank}</span>` : ""}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size],
+    popupAnchor: [0, -size + 2],
   });
 }
+
+// A pin's rank among its own category's siblings, sorted the same way the
+// List view is (explicit `order` if set, else stable fallback by id) — so
+// the number in the map marker always matches its List view position.
+function categoryRank(loc: Location, all: Location[]): number {
+  const siblings = [...all.filter(l => l.category === loc.category)]
+    .sort((a, b) => (a.order ?? a.id ?? 0) - (b.order ?? b.id ?? 0));
+  return siblings.findIndex(l => l.id === loc.id) + 1;
+}
+
+// "You are here" — a small blue dot with a soft halo, distinct from the
+// teardrop pins used for saved locations so it reads as "device position"
+// rather than another saveable spot.
+const CURRENT_POSITION_ICON = L.divIcon({
+  className: "",
+  html: `<div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;">
+    <div style="position:absolute;width:36px;height:36px;border-radius:50%;background:#1976D2;opacity:0.18;"></div>
+    <div style="width:14px;height:14px;border-radius:50%;background:#1976D2;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4);"></div>
+  </div>`,
+  iconSize: [36, 36],
+  iconAnchor: [18, 18],
+});
 
 function TapHandler({ onTap }: { onTap: (lat: number, lng: number) => void }) {
   useMapEvents({ click(e) { onTap(e.latlng.lat, e.latlng.lng); } });
@@ -45,33 +72,39 @@ function TapHandler({ onTap }: { onTap: (lat: number, lng: number) => void }) {
 function appleMapsUrl(loc: Location) { return `https://maps.apple.com/?daddr=${loc.lat},${loc.lng}`; }
 function googleMapsUrl(loc: Location) { return `https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}`; }
 
-// Best-effort reverse geocode for a name/address label — a failed/offline
-// lookup still lets the pin save, just without an address (List view falls
-// back to raw coordinates for that row).
-async function reverseGeocode(lat: number, lng: number): Promise<string | undefined> {
-  try {
-    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
-    const data: { display_name?: string } = await res.json();
-    return data.display_name;
-  } catch {
-    return undefined;
-  }
+interface SearchResult extends NominatimResult { distanceMi: number }
+
+interface PendingPin { lat: number; lng: number; name: string }
+
+// Typical "local/nearby" search radius for driving-distance errands — same
+// ballpark most local-search products default to (a few miles up to ~10-15
+// for a metro area) rather than an unbounded global search.
+const SEARCH_RADIUS_MILES = 10;
+
+// Haversine distance in miles — used to filter/sort search results by
+// actual distance from the user, not just Nominatim's relevance ranking.
+function distanceMiles(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 3958.8;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
-
-interface NominatimResult { display_name: string; lat: string; lon: string }
-
-interface PendingPin { lat: number; lng: number; name: string; address?: string }
 
 export function MapScreen({
   locations, locationCategories, navTab, setNavTab,
   onHome, onStats, onSettings,
-  onAddLocation, onSetLocationAddress, deleteLocationTarget, onRequestDeleteLocation, onCancelDeleteLocation, onConfirmDeleteLocation,
+  onAddLocation, onSetLocationAddress, onMoveLocation, onToggleLocationCategoryOrderLock,
+  deleteLocationTarget, onRequestDeleteLocation, onCancelDeleteLocation, onConfirmDeleteLocation,
 }: {
   locations: Location[]; locationCategories: LocationCategory[];
   navTab: string; setNavTab: (t: string) => void;
   onHome: () => void; onStats: () => void; onSettings: () => void;
   onAddLocation: (loc: { name: string; category: string; lat: number; lng: number; address?: string; note?: string }) => void;
   onSetLocationAddress: (id: number, address: string) => void;
+  onMoveLocation: (id: number, direction: "up" | "down") => void;
+  onToggleLocationCategoryOrderLock: (id: number) => void;
   deleteLocationTarget: number | null;
   onRequestDeleteLocation: (id: number) => void;
   onCancelDeleteLocation: () => void;
@@ -80,35 +113,49 @@ export function MapScreen({
   const headerText = contrastTextColor(HOME_COLOR.p);
   const mapRef = useRef<LeafletMap | null>(null);
   const addressLookupsInFlight = useRef<Set<number>>(new Set());
+  const addressRequestId = useRef(0);
 
   const [view, setView] = useState<"map" | "list">("map");
   const [mapCenter, setMapCenter] = useState<[number, number]>([DEFAULT_MAP_CENTER.lat, DEFAULT_MAP_CENTER.lng]);
+  const [currentPosition, setCurrentPosition] = useState<[number, number] | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>("All");
   const [geoError, setGeoError] = useState<string | null>(null);
   const [addingPin, setAddingPin] = useState(false);
+  const [reordering, setReordering] = useState(false);
 
   const [pendingPin, setPendingPin] = useState<PendingPin | null>(null);
   const [draftName, setDraftName] = useState("");
   const [draftCategory, setDraftCategory] = useState("");
+  const [draftAddress, setDraftAddress] = useState("");
+  const [addressLoading, setAddressLoading] = useState(false);
   const [draftNote, setDraftNote] = useState("");
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<NominatimResult[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Center on the device's location once, on mount; fall back silently to
-  // DEFAULT_MAP_CENTER (already the initial state) if denied/unavailable.
+  // Track the device's live position for the "you are here" marker, and
+  // center the map on it once (the first fix), on mount — falls back
+  // silently to DEFAULT_MAP_CENTER (already the initial state) if
+  // denied/unavailable. Uses watchPosition rather than a one-shot fetch so
+  // the dot keeps up as the crew moves, not just where they were on open.
+  const hasCenteredRef = useRef(false);
   useEffect(() => {
     if (!("geolocation" in navigator)) return;
-    navigator.geolocation.getCurrentPosition(
+    const watchId = navigator.geolocation.watchPosition(
       pos => {
         const center: [number, number] = [pos.coords.latitude, pos.coords.longitude];
-        setMapCenter(center);
-        mapRef.current?.setView(center, 13);
+        setCurrentPosition(center);
+        if (!hasCenteredRef.current) {
+          hasCenteredRef.current = true;
+          setMapCenter(center);
+          mapRef.current?.setView(center, 13);
+        }
       },
-      () => { /* denied/unavailable — keep the fallback center */ },
+      () => { /* denied/unavailable — keep the fallback center, no dot shown */ },
       { enableHighAccuracy: true, timeout: 10000 }
     );
+    return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
   // Backfill addresses for any pin that doesn't have one yet (e.g. the
@@ -125,14 +172,38 @@ export function MapScreen({
     }
   }, [locations, onSetLocationAddress]);
 
+  // Address is shown in the form itself (not just carried silently through
+  // to save) — for search-picked pins it's already known; for tap/geolocation
+  // pins it's looked up right as the form opens, with a "Looking up…"
+  // placeholder while in flight. `addressRequestId` guards against a slow
+  // lookup from a closed/reopened form overwriting a newer one.
   function openAddForm(lat: number, lng: number, name = "", address?: string) {
     setAddingPin(false);
-    setPendingPin({ lat, lng, name, address });
+    setPendingPin({ lat, lng, name });
     setDraftName(name);
     setDraftCategory(locationCategories[0]?.name ?? "");
     setDraftNote("");
     setSearchResults([]);
+    const requestId = ++addressRequestId.current;
+    if (address) {
+      setDraftAddress(address);
+      setAddressLoading(false);
+    } else {
+      setDraftAddress("");
+      setAddressLoading(true);
+      reverseGeocode(lat, lng).then(resolved => {
+        if (addressRequestId.current !== requestId) return;
+        setAddressLoading(false);
+        if (resolved) setDraftAddress(resolved);
+      });
+    }
   }
+
+  // Reordering is scoped to whichever single category is selected — leaving
+  // it (switching category or back to "All") exits reorder mode.
+  useEffect(() => {
+    setReordering(false);
+  }, [activeCategory]);
 
   function handleMapTap(lat: number, lng: number) {
     if (!addingPin) return;
@@ -158,16 +229,23 @@ export function MapScreen({
     if (searchTimer.current) clearTimeout(searchTimer.current);
     if (q.trim().length < 3) { setSearchResults([]); return; }
     searchTimer.current = setTimeout(async () => {
-      // Hard-bounded box (~25mi) around the current map center — biases
-      // results to the local area (device location, or the fallback
-      // DEFAULT_MAP_CENTER) instead of letting global matches win.
-      const [lat, lng] = mapCenter;
+      // Hard-bounded box (~25mi) around the user's actual position (live
+      // GPS if available, else wherever the map is centered) — biases the
+      // API's own results to the local area instead of letting global
+      // matches win; the exact-distance filter/sort below then narrows
+      // and orders that within SEARCH_RADIUS_MILES.
+      const [lat, lng] = currentPosition ?? mapCenter;
       const delta = 0.35;
       const viewbox = `&viewbox=${lng - delta},${lat + delta},${lng + delta},${lat - delta}&bounded=1`;
       try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}${viewbox}`);
+        const res = await fetchWithTimeout(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q=${encodeURIComponent(q)}${viewbox}`);
         const data: NominatimResult[] = await res.json();
-        setSearchResults(data.slice(0, 5));
+        const withDistance = data
+          .map(r => ({ ...r, distanceMi: distanceMiles(lat, lng, parseFloat(r.lat), parseFloat(r.lon)) }))
+          .filter(r => r.distanceMi <= SEARCH_RADIUS_MILES)
+          .sort((a, b) => a.distanceMi - b.distanceMi)
+          .slice(0, 8);
+        setSearchResults(withDistance);
       } catch {
         setSearchResults([]);
       }
@@ -180,17 +258,22 @@ export function MapScreen({
     mapRef.current?.setView([lat, lng], 15);
     setSearchQuery("");
     setSearchResults([]);
-    openAddForm(lat, lng, r.display_name.split(",")[0], r.display_name);
+    const address = r.address ? formatAddress(r.address, r.display_name) : r.display_name;
+    openAddForm(lat, lng, r.name || r.display_name.split(",")[0], address);
   }
 
-  async function saveDraft() {
+  function saveDraft() {
     if (!pendingPin || !draftName.trim() || !draftCategory) return;
-    const address = pendingPin.address ?? await reverseGeocode(pendingPin.lat, pendingPin.lng);
-    onAddLocation({ name: draftName.trim(), category: draftCategory, lat: pendingPin.lat, lng: pendingPin.lng, address, note: draftNote.trim() || undefined });
+    onAddLocation({ name: draftName.trim(), category: draftCategory, lat: pendingPin.lat, lng: pendingPin.lng, address: draftAddress.trim() || undefined, note: draftNote.trim() || undefined });
     setPendingPin(null);
   }
 
-  const visibleLocations = activeCategory === "All" ? locations : locations.filter(l => l.category === activeCategory);
+  const visibleLocations = (activeCategory === "All" ? locations : locations.filter(l => l.category === activeCategory))
+    .slice()
+    .sort((a, b) => a.category !== b.category ? a.category.localeCompare(b.category) : (a.order ?? a.id ?? 0) - (b.order ?? b.id ?? 0));
+
+  const activeLocationCategory = locationCategories.find(cat => cat.name === activeCategory);
+  const isOrderLocked = activeLocationCategory?.orderLocked ?? false;
 
   // Shared between the map overlay (absolutely positioned) and List view
   // (static, flex-wrapped) — same chips, same activeCategory state.
@@ -253,13 +336,54 @@ export function MapScreen({
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {categoryChips()}
           </div>
+
+          {activeLocationCategory && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button onClick={() => !isOrderLocked && setReordering(r => !r)} disabled={isOrderLocked} style={{
+                display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 100,
+                border: `1.5px solid ${reordering ? HOME_COLOR.p : "#E2E5EC"}`,
+                background: reordering ? HOME_COLOR.l : "#fff",
+                color: isOrderLocked ? "#c4c8d0" : reordering ? HOME_COLOR.p : "#6b7280",
+                fontSize: 12, fontWeight: 700, cursor: isOrderLocked ? "default" : "pointer", opacity: isOrderLocked ? 0.6 : 1,
+              }}>
+                <ArrowUpDown size={13} /> {reordering ? "Done Reordering" : "Reorder"}
+              </button>
+              <button onClick={() => { if (activeLocationCategory.id != null) onToggleLocationCategoryOrderLock(activeLocationCategory.id); setReordering(false); }} style={{
+                display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 100,
+                border: `1.5px solid ${isOrderLocked ? "#D32F2F" : "#E2E5EC"}`,
+                background: isOrderLocked ? "#FEF2F2" : "#fff",
+                color: isOrderLocked ? "#D32F2F" : "#6b7280",
+                fontSize: 12, fontWeight: 700, cursor: "pointer",
+              }}>
+                {isOrderLocked ? <Lock size={13} /> : <LockOpen size={13} />} {isOrderLocked ? "Locked" : "Lock Order"}
+              </button>
+            </div>
+          )}
+
           {visibleLocations.length === 0 ? (
             <div style={{ textAlign: "center", color: "#9ca3af", fontSize: 13, padding: "40px 20px" }}>
               {activeCategory === "All" ? "No saved locations yet." : "No locations in this category."}
             </div>
           ) : (
-            visibleLocations.map(loc => (
+            visibleLocations.map((loc, i) => (
               <div key={loc.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: 12, background: "#F8F9FC", borderRadius: 10, border: "1px solid #ECEEF2" }}>
+                {reordering && (
+                  <>
+                    <span style={{
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      width: 20, height: 20, borderRadius: "50%", background: HOME_COLOR.p, color: contrastTextColor(HOME_COLOR.p),
+                      fontSize: 11, fontWeight: 800, flexShrink: 0, marginTop: 2,
+                    }}>{i + 1}</span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2, flexShrink: 0 }}>
+                      <button onClick={() => loc.id != null && onMoveLocation(loc.id, "up")} disabled={i === 0} style={{ background: "none", border: "none", cursor: i === 0 ? "default" : "pointer", padding: 3, display: "flex", opacity: i === 0 ? 0.3 : 1 }}>
+                        <ArrowUp size={14} color="#6b7280" />
+                      </button>
+                      <button onClick={() => loc.id != null && onMoveLocation(loc.id, "down")} disabled={i === visibleLocations.length - 1} style={{ background: "none", border: "none", cursor: i === visibleLocations.length - 1 ? "default" : "pointer", padding: 3, display: "flex", opacity: i === visibleLocations.length - 1 ? 0.3 : 1 }}>
+                        <ArrowDown size={14} color="#6b7280" />
+                      </button>
+                    </div>
+                  </>
+                )}
                 <span style={{ width: 10, height: 10, borderRadius: "50%", background: categoryColor(loc.category, locationCategories), marginTop: 5, flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: "#0d1117" }}>{loc.name}</div>
@@ -284,8 +408,10 @@ export function MapScreen({
       ) : (
       <div style={{ flex: 1, position: "relative", zIndex: 0, padding: "12px 12px 100px", boxSizing: "border-box" }}>
         <div style={{ position: "relative", width: "100%", height: "100%", borderRadius: 18, overflow: "hidden", boxShadow: "0 2px 14px rgba(0,0,0,0.15)" }}>
-        {/* Search box */}
-        <div style={{ position: "absolute", top: 12, left: 12, right: 12, zIndex: 500 }}>
+        {/* Search box — higher z-index than the category chips below it so
+            the results dropdown (which overlaps the chips' position) draws
+            on top instead of behind them. */}
+        <div style={{ position: "absolute", top: 12, left: 12, right: 12, zIndex: 600 }}>
           <div style={{ background: "#fff", border: "1.5px solid #E2E5EC", borderRadius: 12, padding: "9px 12px", display: "flex", alignItems: "center", gap: 8, boxShadow: "0 2px 10px rgba(0,0,0,0.12)" }}>
             <Search size={15} color="#9ca3af" />
             <input type="text" placeholder="Search a place…" value={searchQuery}
@@ -300,8 +426,13 @@ export function MapScreen({
           {searchResults.length > 0 && (
             <div style={{ marginTop: 6, background: "#fff", border: "1.5px solid #E2E5EC", borderRadius: 12, overflow: "hidden", boxShadow: "0 6px 20px rgba(0,0,0,0.15)" }}>
               {searchResults.map((r, i) => (
-                <button key={i} onClick={() => selectSearchResult(r)} style={{ width: "100%", padding: "10px 14px", background: "#fff", border: "none", borderBottom: i < searchResults.length - 1 ? "1px solid #F2F3F7" : "none", textAlign: "left", fontSize: 13, color: "#374151", cursor: "pointer" }}>
-                  {r.display_name}
+                <button key={i} onClick={() => selectSearchResult(r)} style={{ width: "100%", padding: "10px 14px", background: "#fff", border: "none", borderBottom: i < searchResults.length - 1 ? "1px solid #F2F3F7" : "none", textAlign: "left", fontSize: 13, color: "#374151", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {r.name && <strong>{r.name}</strong>}
+                    {r.name ? " · " : ""}
+                    {r.address ? formatAddress(r.address, r.display_name) : r.display_name}
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", flexShrink: 0 }}>{r.distanceMi.toFixed(1)} mi</span>
                 </button>
               ))}
             </div>
@@ -313,14 +444,25 @@ export function MapScreen({
           {categoryChips()}
         </div>
 
-        {addingPin && (
-          <div style={{ position: "absolute", top: 104, left: 12, right: 12, zIndex: 500, background: HOME_COLOR.l, border: `1px solid ${HOME_COLOR.p}55`, borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 600, color: HOME_COLOR.p, textAlign: "center" }}>
-            Tap the map to place a pin
-          </div>
-        )}
-        {geoError && (
-          <div style={{ position: "absolute", top: 104, left: 12, right: 12, zIndex: 500, background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 10, padding: "8px 12px", fontSize: 12, color: "#D32F2F" }}>
-            {geoError}
+        {/* Status toast — centered low on the map, narrow enough to sit
+            between the zoom control (bottom-left) and locate button
+            (bottom-right) rather than covering either; dismissible via the
+            small X. */}
+        {(addingPin || geoError) && (
+          <div style={{
+            position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)",
+            width: "max-content", maxWidth: "calc(100% - 140px)", zIndex: 700,
+            background: geoError ? "#FEF2F2" : HOME_COLOR.l,
+            border: `1px solid ${geoError ? "#FECACA" : `${HOME_COLOR.p}55`}`,
+            borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", gap: 8,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: geoError ? "#D32F2F" : HOME_COLOR.p, textAlign: "center" }}>
+              {geoError || "Tap the map to place a pin"}
+            </span>
+            <button onClick={() => { if (geoError) setGeoError(null); else setAddingPin(false); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", flexShrink: 0 }}>
+              <X size={14} color={geoError ? "#D32F2F" : HOME_COLOR.p} />
+            </button>
           </div>
         )}
 
@@ -337,8 +479,11 @@ export function MapScreen({
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap contributors" />
           <ZoomControl position="bottomleft" />
           <TapHandler onTap={handleMapTap} />
+          {currentPosition && (
+            <Marker position={currentPosition} icon={CURRENT_POSITION_ICON} zIndexOffset={1000} interactive={false} />
+          )}
           {visibleLocations.map(loc => (
-            <Marker key={loc.id} position={[loc.lat, loc.lng]} icon={pinIcon(categoryColor(loc.category, locationCategories))}>
+            <Marker key={loc.id} position={[loc.lat, loc.lng]} icon={pinIcon(categoryColor(loc.category, locationCategories), categoryRank(loc, locations))}>
               <Popup>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 140 }}>
                   <strong style={{ fontSize: 13 }}>{loc.name}</strong>
@@ -372,6 +517,9 @@ export function MapScreen({
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <input type="text" value={draftName} onChange={e => setDraftName(e.target.value)}
             placeholder="Name" style={textInputStyle} />
+          <input type="text" value={draftAddress} readOnly
+            placeholder={addressLoading ? "Looking up address…" : "Address"}
+            style={{ ...textInputStyle, background: "#EDEEF2", color: "#6b7280", cursor: "default" }} />
           {locationCategories.length === 0 ? (
             <p style={{ fontSize: 13, color: "#D32F2F", margin: 0 }}>Add a category in Settings before saving a location.</p>
           ) : (
